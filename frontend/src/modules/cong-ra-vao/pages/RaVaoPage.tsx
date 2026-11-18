@@ -4,6 +4,7 @@ import { DangTai, ThongBao } from '@/shared/ui/ui';
 import { useTaiDuLieu } from '@/shared/ui/useTaiDuLieu';
 import { useNgheThongBao } from '@/shared/realtime/useNgheThongBao';
 import { useApp } from '@/app/AppContext';
+import { soId, toSang, useKhiMoTuThongBao, useThamSoMotLan } from '@/shared/ui/useDichDen';
 import { dinhDangNgay, dinhDangTien, hienThiBienSo } from '@/shared/utils/format';
 import type { LuotGui, YeuCauXacNhan } from '../models';
 import { TEN_TRANG_THAI_LUOT } from '../models';
@@ -20,6 +21,22 @@ export function RaVaoPage() {
   useNgheThongBao(() => void rv.taiLai());
   const choTra = rv.duLieu?.lichSu.filter((l) => l.trangThai === 'CHO_THANH_TOAN') ?? [];
 
+  // Mở từ thông báo: ?luot=123 (&xacNhan=1 nếu là yêu cầu xác nhận ra). Đọc một lần rồi xoá khỏi URL.
+  const [thamSo] = useThamSoMotLan('luot', 'xacNhan');
+  const [tinMo, setTinMo] = useState<{ loai: 'tin' | 'canh-bao'; noiDung: string } | null>(null);
+  const d = rv.duLieu;
+  useKhiMoTuThongBao(thamSo, !!d, (t) => {
+    const luotMo = soId(t.luot);
+    if (!d || luotMo === null) return;
+    setTinMo(null);
+    if (d.dangCho.some((y) => y.luotGuiId === luotMo)) { toSang(`yc-luot-${luotMo}`); return; }
+    const l = d.lichSu.find((x) => x.id === luotMo);
+    if (!l) { setTinMo({ loai: 'tin', noiDung: 'Lượt gửi này đã cũ, không còn trong 30 lượt gần nhất.' }); return; }
+    if (l.trangThai === 'CHO_THANH_TOAN') { toSang(`tra-luot-${l.id}`); return; }
+    toSang(`luot-${l.id}`);
+    if (t.xacNhan) setTinMo(tinYeuCauDaKetThuc(l));
+  });
+
   return (
     <>
       <div className="tieu-de-trang">
@@ -28,6 +45,7 @@ export function RaVaoPage() {
       </div>
       {rv.loi && <ThongBao loai="loi">{rv.loi}</ThongBao>}
       {rv.dangTai && !rv.duLieu && <DangTai />}
+      {tinMo && <ThongBao loai={tinMo.loai}>{tinMo.noiDung}</ThongBao>}
       {rv.duLieu && (
         <>
           {choTra.map((l) => <ChoThanhToan key={l.id} l={l} />)}
@@ -44,7 +62,7 @@ export function RaVaoPage() {
                 <thead><tr><th>Biển số</th><th>Vào lúc</th><th>Ra lúc</th><th>Trạng thái</th></tr></thead>
                 <tbody>
                   {rv.duLieu.lichSu.map((l) => (
-                    <tr key={l.id}>
+                    <tr key={l.id} data-dich={`luot-${l.id}`}>
                       <td className="bien-so nho">{hienThiBienSo(l.bienSo)}</td>
                       <td>{dinhDangNgay(l.thoiGianVao)}</td>
                       <td>{dinhDangNgay(l.thoiGianRa)}</td>
@@ -61,9 +79,20 @@ export function RaVaoPage() {
   );
 }
 
+/** Mở yêu cầu xác nhận từ thông báo nhưng yêu cầu không còn chờ: nói rõ trạng thái hiện tại, KHÔNG có nút làm tiếp. */
+function tinYeuCauDaKetThuc(l: LuotGui): { loai: 'tin' | 'canh-bao'; noiDung: string } {
+  const bien = hienThiBienSo(l.bienSo);
+  const gio = l.yeuCauHetHanLuc ? new Date(l.yeuCauHetHanLuc).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : null;
+  if (l.trangThai === 'DA_RA') return { loai: 'tin', noiDung: `Yêu cầu xác nhận của xe ${bien} đã xong: xe đã ra bãi lúc ${dinhDangNgay(l.thoiGianRa)}.` };
+  if (l.trangThai === 'NGHI_MAT') return { loai: 'canh-bao', noiDung: `Xe ${bien} đã được báo "Không phải tôi". Cổng không mở, Admin đang kiểm tra.` };
+  if (l.yeuCauKetQua === 'HET_HAN')
+    return { loai: 'canh-bao', noiDung: `Yêu cầu xác nhận của xe ${bien} đã hết hạn${gio ? ` lúc ${gio}` : ''}, cổng không mở. Admin đang xử lý.` };
+  return { loai: 'tin', noiDung: `Yêu cầu xác nhận của xe ${bien} đã kết thúc. Trạng thái hiện tại: ${TEN_TRANG_THAI_LUOT[l.trangThai]}.` };
+}
+
 function ChoThanhToan({ l }: { l: LuotGui }) {
   return (
-    <div className="the yeu-cau yeu-cau-khach">
+    <div className="the yeu-cau yeu-cau-khach" data-dich={`tra-luot-${l.id}`}>
       <div className="xe-dau">
         <div>
           <div className="mo">Xe đang chờ ở cổng ra</div>
@@ -91,7 +120,7 @@ function XacNhanRa({ y, khiXong }: { y: YeuCauXacNhan; khiXong: () => void }) {
   }
 
   return (
-    <div className="the yeu-cau yeu-cau-khach">
+    <div className="the yeu-cau yeu-cau-khach" data-dich={`yc-luot-${y.luotGuiId}`}>
       <div className="xe-dau">
         <div>
           <div className="mo">Xe đang ở cổng ra</div>

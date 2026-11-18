@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { DangTai, ThongBao } from '@/shared/ui/ui';
 import { useTaiDuLieu } from '@/shared/ui/useTaiDuLieu';
 import { useApp } from '@/app/AppContext';
+import { useVeKhongMoDuoc } from '@/shared/ui/useDichDen';
 import type { PhiQuaHan } from '../models';
 import { dinhDangNgay, dinhDangTien, hienThiBienSo } from '@/shared/utils/format';
 
@@ -14,6 +15,10 @@ export function PhiQuaHanPage() {
   const [dangTra, setDangTra] = useState(false);
   const [daTra, setDaTra] = useState<PhiQuaHan | null>(null);
   const [loi, setLoi] = useState<string | null>(null);
+
+  // Xe không còn thuộc tài khoản (mở từ thông báo cũ): về hộp thư, báo không mở được
+  const veKhongMoDuoc = useVeKhongMoDuoc();
+  useEffect(() => { if (xe.duLieu === null && !xe.dangTai && !xe.loi) veKhongMoDuoc(); }, [xe.duLieu, xe.dangTai, xe.loi, veKhongMoDuoc]);
 
   async function tra() {
     setDangTra(true); setLoi(null);
@@ -48,7 +53,7 @@ export function PhiQuaHanPage() {
           <button className="nut nut-nguy" onClick={tra} disabled={dangTra}>{dangTra ? 'Đang xử lý…' : 'Thanh toán (giả lập)'}</button>
         </div>
       ) : (
-        !daTra && <ThongBao loai="tin">Xe này không có phí quá hạn. <Link to="/xe">Quay lại danh sách xe</Link></ThongBao>
+        !daTra && <ThongBao loai="tin">Xe này không còn phí quá hạn (khoản phí đã được thanh toán hoặc gói đã gia hạn). <Link to="/ra-vao">Mở Ra vào</Link> · <Link to="/xe">Xe của tôi</Link></ThongBao>
       )}
     </>
   );

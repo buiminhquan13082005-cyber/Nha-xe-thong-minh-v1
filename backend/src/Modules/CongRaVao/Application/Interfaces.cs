@@ -49,6 +49,9 @@ public interface ICongQuery
     Task<IReadOnlyList<(YeuCauXacNhan YeuCau, int XeId)>> LayYeuCauDangChoAsync(IReadOnlyCollection<int>? xeIds, CancellationToken ct);
     Task<IReadOnlyList<SuKienCong>> LaySuKienGanDayAsync(int soDong, CancellationToken ct);
     Task<IReadOnlyList<LuotGui>> LayLuotCuaXeAsync(IReadOnlyCollection<int> xeIds, int soDong, CancellationToken ct);
+    /// <summary>Yêu cầu xác nhận ra gần nhất của từng lượt (trang Ra vào báo "đã hết hạn lúc …" khi mở từ thông báo cũ).</summary>
+    Task<IReadOnlyDictionary<int, YeuCauXacNhan>> LayYeuCauGanNhatAsync(IReadOnlyCollection<int> luotIds, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyDictionary<int, YeuCauXacNhan>>(new Dictionary<int, YeuCauXacNhan>());
     /// <summary>Lượt gửi đang mở cần Admin xử lý: nghi mất, chờ thanh toán, hoặc yêu cầu ra gần nhất đã hết hạn.</summary>
     Task<IReadOnlyList<(LuotGui Luot, string LyDo)>> LayLuotCanXuLyAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<(LuotGui, string)>>(Array.Empty<(LuotGui, string)>());

@@ -71,19 +71,21 @@ public class KetThucYeuCau
         switch (yc.KetQua)
         {
             case KetQuaXacNhan.DongY when luot.TrangThai == TrangThaiLuot.ChoThanhToan:
-                await _thongBao.GuiNhieuAsync(nguoiDung, LoaiThongBao.ChoThanhToan, NoiDungCong.ChoThanhToan(bienSo, ten, no), ct);
+                await _thongBao.GuiNhieuAsync(nguoiDung, LoaiThongBao.ChoThanhToan, NoiDungCong.ChoThanhToan(bienSo, ten, no),
+                    new DichThongBao(HanhDongThongBao.TraPhi, luot.XeId), ct);
                 break;
             case KetQuaXacNhan.DongY:
                 await _phat.PhatAsync(new XeDaRa(luot.Id, luot.XeId, luot.ThoiGianRa!.Value), ct);
-                await _thongBao.GuiNhieuAsync(nguoiDung, LoaiThongBao.Ra, NoiDungCong.DaRaBoi(bienSo, ten, luot.ThoiGianRa.Value), ct);
+                await _thongBao.GuiNhieuAsync(nguoiDung, LoaiThongBao.Ra, NoiDungCong.DaRaBoi(bienSo, ten, luot.ThoiGianRa.Value),
+                    new DichThongBao(HanhDongThongBao.XemLuot, luot.Id), ct);
                 break;
             case KetQuaXacNhan.TuChoi:
-                await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.NghiMat, NoiDungCong.NghiMat(bienSo), ct);
-                await _thongBao.GuiNhieuAsync(nguoiDung, LoaiThongBao.NghiMat, NoiDungCong.KhongMo(bienSo, yc.LyDo!), ct);
+                await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.NghiMat, NoiDungCong.NghiMat(bienSo), new DichThongBao(HanhDongThongBao.XuLyCongRa, luot.Id), ct);
+                await _thongBao.GuiNhieuAsync(nguoiDung, LoaiThongBao.NghiMat, NoiDungCong.KhongMo(bienSo, yc.LyDo!), new DichThongBao(HanhDongThongBao.XemLuot, luot.Id), ct);
                 break;
             default: // hết 60 giây: chuyển Admin
-                await _thongBao.GuiNhieuAsync(nguoiDung, LoaiThongBao.Ra, NoiDungCong.KhongMo(bienSo, yc.LyDo!), ct);
-                await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.Ra, NoiDungCong.HetGioChoAdmin(bienSo), ct);
+                await _thongBao.GuiNhieuAsync(nguoiDung, LoaiThongBao.Ra, NoiDungCong.KhongMo(bienSo, yc.LyDo!), new DichThongBao(HanhDongThongBao.XemLuot, luot.Id), ct);
+                await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.Ra, NoiDungCong.HetGioChoAdmin(bienSo), new DichThongBao(HanhDongThongBao.XuLyCongRa, luot.Id), ct);
                 break;
         }
     }
@@ -101,7 +103,7 @@ public class KetThucYeuCau
         {
             await _phat.PhatAsync(new XeDaRa(luot.Id, luot.XeId, luot.ThoiGianRa!.Value), ct);
             await _thongBao.GuiNhieuAsync(await _goiCho.LayNguoiDungXeAsync(luot.XeId, ct), LoaiThongBao.Ra,
-                                          NoiDungCong.DaRa(bienSo, luot.ThoiGianRa.Value), ct);
+                                          NoiDungCong.DaRa(bienSo, luot.ThoiGianRa.Value), new DichThongBao(HanhDongThongBao.XemLuot, luot.Id), ct);
         }, _log);
         return true;
     }
@@ -196,7 +198,7 @@ public class AdminMoTayUseCase
             {
                 await _phat.PhatAsync(new XeDaRa(luot.Id, luot.XeId, luot.ThoiGianRa!.Value), ct);
                 await _thongBao.GuiNhieuAsync(await _goiCho.LayNguoiDungXeAsync(luot.XeId, ct), LoaiThongBao.Ra,
-                                              NoiDungCong.AdminMoTay(bienSo, ld, luot.ThoiGianRa.Value), ct);
+                                              NoiDungCong.AdminMoTay(bienSo, ld, luot.ThoiGianRa.Value), new DichThongBao(HanhDongThongBao.XemLuot, luot.Id), ct);
             }, _log);
         });
         return new KetQuaCongDto(SuKienCong.Ra, true, false, null, "Đã mở barrier thủ công", luotGuiId, XeId: luot!.XeId);

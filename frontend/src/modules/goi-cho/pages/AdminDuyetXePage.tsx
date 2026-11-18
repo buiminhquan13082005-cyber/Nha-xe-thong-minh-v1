@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnhGiayDangKy } from '../components/AnhGiayDangKy';
 import { KhungChiTietXe, NhanGoi } from '../components/KhungChiTietXe';
 import { ChoConBanThe } from '../components/GoiChoUi';
@@ -6,6 +6,7 @@ import { DangTai, ThongBao } from '@/shared/ui/ui';
 import { useTaiDuLieu } from '@/shared/ui/useTaiDuLieu';
 import { useTreHoan } from '@/shared/ui/useTreHoan';
 import { useApp } from '@/app/AppContext';
+import { soId, toSang, useKhiMoTuThongBao, useThamSoMotLan } from '@/shared/ui/useDichDen';
 import type { LocXeDaDuyet, XeQuanLy } from '../models';
 import { timChoCon } from '../utils/choCon';
 import { chuanHoaBienSo, dinhDangNgay, hienThiBienSo, tenLoaiXe } from '@/shared/utils/format';
@@ -15,17 +16,31 @@ type Tab = 'cho-duyet' | 'da-duyet';
 /** Trang Admin: chỉ điều phối 2 tab, mỗi tab là một component riêng (SRP). */
 export function AdminDuyetXePage() {
   const [tab, setTab] = useState<Tab>('cho-duyet');
+  // Mở từ thông báo: ?tab=cho-duyet|da-duyet&xe=45 → chọn tab, tô sáng / mở đúng xe
+  const [thamSo] = useThamSoMotLan('tab', 'xe');
+  const [xeMo, setXeMo] = useState<XeCanMo | null>(null);
+  useKhiMoTuThongBao(thamSo, true, (t) => {
+    if (t.tab === 'cho-duyet' || t.tab === 'da-duyet') setTab(t.tab);
+    const id = soId(t.xe);
+    setXeMo(id ? { xeId: id } : null);
+  });
+  const doiTab = (t: Tab) => { setTab(t); setXeMo(null); };
   return (
     <>
       <h1>Quản lý xe</h1>
       <div className="tab" role="tablist">
-        <button className={tab === 'cho-duyet' ? 'chon' : ''} onClick={() => setTab('cho-duyet')}>Chờ duyệt</button>
-        <button className={tab === 'da-duyet' ? 'chon' : ''} onClick={() => setTab('da-duyet')}>Xe đã duyệt</button>
+        <button className={tab === 'cho-duyet' ? 'chon' : ''} onClick={() => doiTab('cho-duyet')}>Chờ duyệt</button>
+        <button className={tab === 'da-duyet' ? 'chon' : ''} onClick={() => doiTab('da-duyet')}>Xe đã duyệt</button>
       </div>
-      {tab === 'cho-duyet' ? <BangChoDuyet /> : <BangXeDaDuyet />}
+      {tab === 'cho-duyet'
+        ? <BangChoDuyet xeMo={xeMo} xongMo={() => setXeMo(null)} sangDaDuyet={(m) => { setTab('da-duyet'); setXeMo(m); }} />
+        : <BangXeDaDuyet xeMo={xeMo} xongMo={() => setXeMo(null)} />}
     </>
   );
 }
+
+/** Xe cần mở khi vào trang từ thông báo; tin: câu giải thích (ví dụ "đã được duyệt bởi …"). */
+interface XeCanMo { xeId: number; tin?: string }
 
 function ONhanCho({ c }: { c?: { soChoConBan: number; sucChua: number } }) {
   if (!c) return <span className="mo">…</span>;
@@ -40,7 +55,7 @@ function ONhanCho({ c }: { c?: { soChoConBan: number; sucChua: number } }) {
  * - bấm "Xem" để mở ảnh giấy đăng ký cạnh biển số khách nhập, duyệt xong tự chuyển sang xe kế tiếp;
  * - chọn nhiều xe rồi duyệt / từ chối một lần (từ chối dùng chung một lý do).
  */
-function BangChoDuyet() {
+function BangChoDuyet({ xeMo, xongMo, sangDaDuyet }: { xeMo: XeCanMo | null; xongMo: () => void; sangDaDuyet: (m: XeCanMo) => void }) {
   const { services } = useApp();
   const ds = useTaiDuLieu(() => services.adminGoiCho.layXeChoDuyet());
   const bangGia = useTaiDuLieu(() => services.goiCho.layBangGia());
@@ -59,6 +74,31 @@ function BangChoDuyet() {
   const dsXe = tim.trim() ? tatCa.filter((x) => x.bienSo.includes(chuanHoaBienSo(tim))) : tatCa;
   const bien = (id: number) => hienThiBienSo(tatCa.find((x) => x.xeId === id)?.bienSo ?? String(id));
   const xeDangXem = dsXe.find((x) => x.xeId === xemId) ?? null;
+
+  // Mở từ thông báo "có xe chờ duyệt": còn trong hàng chờ thì mở ảnh + tô sáng; đã duyệt thì sang tab Xe đã duyệt
+  useEffect(() => {
+    if (!xeMo || !ds.duLieu) return;
+    const id = xeMo.xeId;
+    xongMo();
+    const x = ds.duLieu.find((v) => v.xeId === id);
+    if (x) {
+      setTim('');
+      if (x.coAnh) setXemId(id);
+      requestAnimationFrame(() => toSang(`xe-${id}`));
+      return;
+    }
+    services.adminGoiCho.layChiTietXe(id).then((ct) => {
+      const b = hienThiBienSo(ct.xe.bienSo);
+      if (ct.xe.trangThaiDuyet === 'DA_DUYET')
+        sangDaDuyet({ xeId: id, tin: `Xe ${b} đã được duyệt${ct.xe.tenAdminDuyet ? ` bởi ${ct.xe.tenAdminDuyet}` : ''}${ct.xe.duyetLuc ? ` lúc ${dinhDangNgay(ct.xe.duyetLuc)}` : ''}.` });
+      else if (ct.xe.trangThaiDuyet === 'TU_CHOI')
+        setThongBao({ loai: 'canh-bao', noiDung: `Xe ${b} đã bị từ chối, đang chờ chủ xe gửi lại ảnh giấy đăng ký.` });
+      else if (ct.xe.trangThaiDuyet === 'BI_GO')
+        setThongBao({ loai: 'canh-bao', noiDung: `Xe ${b} đã bị gỡ khỏi hệ thống.` });
+      else setThongBao({ loai: 'canh-bao', noiDung: `Xe ${b} chưa nằm trong hàng chờ (chưa có ảnh giấy đăng ký).` });
+    }).catch(() => setThongBao({ loai: 'loi', noiDung: 'Không mở được nội dung này: không tìm thấy xe.' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xeMo, ds.duLieu]);
 
   function batTat(id: number) {
     setChon((c) => { const m = new Set(c); if (m.has(id)) m.delete(id); else m.add(id); return m; });
@@ -156,7 +196,7 @@ function BangChoDuyet() {
               </tr></thead>
               <tbody>
                 {dsXe.map((x) => (
-                  <tr key={x.xeId} className={x.xeId === xemId ? 'dong-chon' : ''}>
+                  <tr key={x.xeId} className={x.xeId === xemId ? 'dong-chon' : ''} data-dich={`xe-${x.xeId}`}>
                     <td><input type="checkbox" aria-label={`Chọn ${x.bienSo}`} checked={chon.has(x.xeId)} onChange={() => batTat(x.xeId)} /></td>
                     <td className="bien-so nho">{hienThiBienSo(x.bienSo)}</td>
                     <td>{tenLoaiXe(x.loaiXeId)}</td>
@@ -205,7 +245,7 @@ const SO_DONG = 20;
  * Tab "Xe đã duyệt": tìm biển số ở server (chờ 300 ms sau lần gõ cuối), lọc nhanh, phân trang 20 xe/trang.
  * Bấm cả dòng để mở khung chi tiết; nút "Gỡ xe" trên dòng chặn sự kiện lan ra dòng.
  */
-function BangXeDaDuyet() {
+function BangXeDaDuyet({ xeMo, xongMo }: { xeMo: XeCanMo | null; xongMo: () => void }) {
   const { services } = useApp();
   const [tim, setTim] = useState('');
   const [loc, setLoc] = useState<LocXeDaDuyet>('TAT_CA');
@@ -236,6 +276,28 @@ function BangXeDaDuyet() {
     finally { setDangGui(false); }
   }
 
+  // Mở từ thông báo (khách huỷ gói, xe vừa được duyệt): tìm theo biển số của xe rồi mở khung chi tiết
+  const [tinMo, setTinMo] = useState<string | null>(null);
+  const [choMo, setChoMo] = useState<{ xeId: number; bienSo: string } | null>(null);
+  useEffect(() => {
+    if (!xeMo) return;
+    xongMo();
+    setTinMo(xeMo.tin ?? null);
+    services.adminGoiCho.layChiTietXe(xeMo.xeId).then((ct) => {
+      setLoc('TAT_CA'); setTim(ct.xe.bienSo); setChoMo({ xeId: ct.xe.xeId, bienSo: ct.xe.bienSo });
+    }).catch(() => setThongBao({ loai: 'loi', noiDung: 'Không mở được nội dung này: không tìm thấy xe.' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xeMo]);
+  useEffect(() => {
+    if (!choMo || !ds.duLieu || ds.dangTai) return;
+    const r = ds.duLieu.ds.find((x) => x.xeId === choMo.xeId);
+    if (r) { setChoMo(null); setXemXe(r); requestAnimationFrame(() => toSang(`xe-${r.xeId}`)); return; }
+    if (timTre === choMo.bienSo) { // đã tìm đúng biển mà không có: xe không còn trong danh sách đã duyệt (bị gỡ)
+      setChoMo(null);
+      setThongBao({ loai: 'loi', noiDung: `Xe ${hienThiBienSo(choMo.bienSo)} không còn trong danh sách xe đã duyệt (có thể đã bị gỡ).` });
+    }
+  }, [choMo, ds.duLieu, ds.dangTai, timTre]);
+
   function moGo(x: XeQuanLy) { setXemXe(null); setDangGo(x); setLyDo(''); setThongBao(null); }
 
   const kq = ds.duLieu;
@@ -253,6 +315,7 @@ function BangXeDaDuyet() {
         </div>
       </div>
 
+      {tinMo && <ThongBao loai="tin">{tinMo}</ThongBao>}
       {thongBao && <ThongBao loai={thongBao.loai}>{thongBao.noiDung}</ThongBao>}
       {ds.loi && <ThongBao loai="loi">{ds.loi}</ThongBao>}
       {ds.dangTai && !kq && <DangTai />}
@@ -283,7 +346,7 @@ function BangXeDaDuyet() {
               <thead><tr><th>Biển số</th><th>Loại xe</th><th>Chủ xe</th><th>Gói hiện tại</th><th>Hết hạn</th><th>Trạng thái gói</th><th>Trong bãi</th><th></th></tr></thead>
               <tbody>
                 {kq.ds.map((x) => (
-                  <tr key={x.xeId} className={xemXe?.xeId === x.xeId ? 'dong-chon' : ''} tabIndex={0}
+                  <tr key={x.xeId} className={xemXe?.xeId === x.xeId ? 'dong-chon' : ''} tabIndex={0} data-dich={`xe-${x.xeId}`}
                       onClick={() => setXemXe(x)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setXemXe(x); } }}
                       aria-label={`Xem chi tiết xe ${hienThiBienSo(x.bienSo)}`}>

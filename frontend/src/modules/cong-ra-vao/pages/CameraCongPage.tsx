@@ -3,6 +3,10 @@ import { useApp } from '@/app/AppContext';
 import { hienThiBienSo } from '@/shared/utils/format';
 import type { ChiDan } from '@/modules/tim-xe/models';
 import type { KetQuaCong, LuotCong } from '../models';
+import { TEN_TRANG_THAI_LUOT } from '../models';
+import { ThongBao } from '@/shared/ui/ui';
+import { dinhDangNgay } from '@/shared/utils/format';
+import { soId, toSang, useKhiMoTuThongBao, useThamSoMotLan } from '@/shared/ui/useDichDen';
 import { chupKhung, lietKeCamera, NguonFileVideo, NguonWebcam, type INguonHinh } from '../camera/nguonHinh';
 
 /** Giá trị đã chốt trong đề cương v10: quét mỗi 1 giây, cùng một biển trong 30 giây chỉ xử lý một lần. */
@@ -173,6 +177,11 @@ export function CameraCongPage({ cong }: { cong: Cong }) {
   }
 
   const kb = hien?.kq.khungBien;
+  // Mở từ thông báo Admin (quá 60 giây không ai xác nhận, người dùng báo "Không phải tôi"): ?luot=123
+  const [thamSo] = useThamSoMotLan('luot');
+  const [luotMo, setLuotMo] = useState<number | null>(null);
+  useKhiMoTuThongBao(thamSo, true, (t) => setLuotMo(soId(t.luot)));
+
   const tenCong = cong === 'vao' ? 'Cổng vào' : 'Cổng ra';
   return (
     <div className="mc">
@@ -189,6 +198,8 @@ export function CameraCongPage({ cong }: { cong: Cong }) {
         <input ref={oFile} type="file" accept="video/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) setNguon(new NguonFileVideo(f)); e.target.value = ''; }} />
         <button className="mc-chip" onClick={() => void (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen())}>Toàn màn hình ⛶</button>
       </div>
+
+      {cong === 'ra' && luotMo !== null && <LuotCanXuLy luotGuiId={luotMo} dong={() => setLuotMo(null)} />}
 
       <div className="mc-khung">
         <section>
@@ -323,6 +334,61 @@ function KhungKetQua({ h, chiDan, gio, chon, boQua }: {
 }
 
 /** Mở barie thủ công (UC-A10) ngay tại màn hình cổng ra: hết 60 giây không ai xác nhận, nghi mất đã kiểm tra, app / AI lỗi. Bắt buộc lý do. */
+/**
+ * Khung "Lượt cần xử lý" (mở từ thông báo): biển số, lý do, ảnh đối chứng, nút mở barie tay.
+ * Lượt đã kết thúc (xe đã ra) thì chỉ hiện trạng thái, không có nút.
+ */
+function LuotCanXuLy({ luotGuiId, dong }: { luotGuiId: number; dong: () => void }) {
+  const { services } = useApp();
+  const [luot, setLuot] = useState<LuotCong | null>(null);
+  const [tt, setTt] = useState<{ bienSo: string | null; lyDo: string | null }>({ bienSo: null, lyDo: null });
+  const [anhRa, setAnhRa] = useState<string | null>(null);
+  const [loi, setLoi] = useState<string | null>(null);
+
+  useEffect(() => {
+    let huy = false, url: string | null = null;
+    setLoi(null); setLuot(null); setAnhRa(null);
+    Promise.all([services.congRaVao.layLuot(luotGuiId), services.congRaVao.layManHinhCong().catch(() => null)])
+      .then(([l, mh]) => {
+        if (huy) return;
+        const c = mh?.canXuLy?.find((x) => x.luotGuiId === luotGuiId);
+        setLuot(l);
+        setTt({ bienSo: c?.bienSo ?? mh?.xe.find((x) => x.xeId === l.xeId)?.bienSo ?? null, lyDo: c?.lyDo ?? null });
+        requestAnimationFrame(() => toSang('luot-can-xu-ly'));
+        if (l.coAnhRa) services.congRaVao.layAnhDoiChung(luotGuiId, 'ra')
+          .then((b) => { if (!huy) { url = URL.createObjectURL(b); setAnhRa(url); } }).catch(() => { /* không có ảnh ra */ });
+      })
+      .catch((e) => { if (!huy) setLoi((e as Error).message); });
+    return () => { huy = true; if (url) URL.revokeObjectURL(url); };
+  }, [luotGuiId, services]);
+
+  const xong = luot?.trangThai === 'DA_RA';
+  return (
+    <section className="the mc-xu-ly" data-dich="luot-can-xu-ly" aria-label="Lượt cần xử lý">
+      <div className="xe-dau">
+        <div>
+          <div className="mo">Lượt cần xử lý · mở từ thông báo</div>
+          <div className="bien-so">{tt.bienSo ? hienThiBienSo(tt.bienSo) : `Lượt #${luotGuiId}`}</div>
+        </div>
+        <span className="hang-nut" style={{ marginTop: 0 }}>
+          {luot && <span className={`nhan ${xong ? 'nhan-ok' : luot.trangThai === 'NGHI_MAT' ? 'nhan-loi' : 'nhan-cho'}`}>{TEN_TRANG_THAI_LUOT[luot.trangThai]}</span>}
+          <button type="button" className="nut nut-phu nut-nho" onClick={dong}>Đóng</button>
+        </span>
+      </div>
+      {loi && <ThongBao loai="loi">Không mở được lượt này: {loi}</ThongBao>}
+      {luot && (
+        <>
+          {tt.lyDo && <p>{tt.lyDo}</p>}
+          <p className="mo">Vào bãi lúc {dinhDangNgay(luot.thoiGianVao)}</p>
+          {xong
+            ? <ThongBao loai="tin">Lượt này đã kết thúc: xe đã ra lúc {dinhDangNgay(luot.thoiGianRa)}. Không cần xử lý nữa.</ThongBao>
+            : <><DoiChung luotGuiId={luotGuiId} coAnhVao={luot.coAnhVao} anhRa={anhRa} /><MoBarieTay luotGuiId={luotGuiId} /></>}
+        </>
+      )}
+    </section>
+  );
+}
+
 function MoBarieTay({ luotGuiId }: { luotGuiId: number }) {
   const { services } = useApp();
   const [lyDo, setLyDo] = useState('');

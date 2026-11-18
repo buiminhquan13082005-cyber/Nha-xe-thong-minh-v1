@@ -3,6 +3,8 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from './AppContext';
 import { useNgheThongBao } from '@/shared/realtime/useNgheThongBao';
 import { DieuHuongToanCuc } from '@/modules/tim-xe';
+import { nhanHanhDong, useMoThongBao } from '@/modules/thong-bao';
+import type { SuKienThoiGianThuc } from '@/shared/realtime/thoiGianThuc';
 
 export function Layout() {
   const { phien, dangXuat, services } = useApp();
@@ -13,11 +15,12 @@ export function Layout() {
   const [xeChoDuyet, setXeChoDuyet] = useState(0);
   const [loiDangXuat, setLoiDangXuat] = useState('');
   const [dangThoat, setDangThoat] = useState(false);
-  const [moi, setMoi] = useState<{ noiDung: string; khoa: number } | null>(null);
+  const [moi, setMoi] = useState<(SuKienThoiGianThuc & { khoa: number }) | null>(null);
+  const moThongBao = useMoThongBao();
   const [lanTai, setLanTai] = useState(0);
   const [moMenu, setMoMenu] = useState(false);
   // Thông báo tới qua SignalR: hiện thẻ nổi vài giây và tải lại số chưa đọc
-  useNgheThongBao((s) => { setMoi({ noiDung: s.noiDung, khoa: Date.now() }); setLanTai((n) => n + 1); });
+  useNgheThongBao((s) => { setMoi({ ...s, khoa: Date.now() }); setLanTai((n) => n + 1); });
   useEffect(() => {
     if (!moi) return;
     const id = window.setTimeout(() => setMoi(null), 6_000);
@@ -90,9 +93,14 @@ export function Layout() {
       {/* Người dùng: xe vừa qua cổng thì màn hình chỉ đường tự bật ở bất kỳ trang nào */}
       {!laAdmin && <DieuHuongToanCuc />}
       {moi && (
-        <div key={moi.khoa} className="the-noi" role="status" onClick={() => { setMoi(null); nav(laAdmin ? '/admin/thong-bao' : '/thong-bao'); }}>
+        // Bấm thẻ nổi: cùng chỗ đi tới như bấm thông báo trong hộp thư; không có trang đích thì mở hộp thư
+        <div key={moi.khoa} className="the-noi" role="status" onClick={async () => {
+          const s = moi; setMoi(null);
+          if (!(await moThongBao({ ...s, daDoc: false }))) nav(laAdmin ? '/admin/thong-bao' : '/thong-bao');
+        }}>
           <span className="nhan-nho">Thông báo mới</span>
           <span>{moi.noiDung}</span>
+          {nhanHanhDong(moi, laAdmin) && <span className="tb-viec">{nhanHanhDong(moi, laAdmin)} →</span>}
         </div>
       )}
     </div>

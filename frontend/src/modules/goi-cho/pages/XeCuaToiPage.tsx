@@ -5,6 +5,7 @@ import { DangTai, ThongBao } from '@/shared/ui/ui';
 import { useTaiDuLieu } from '@/shared/ui/useTaiDuLieu';
 import { XeThe } from '../components/XeThe';
 import { useApp } from '@/app/AppContext';
+import { soId, toSang, useKhiMoTuThongBao, useThamSoMotLan, useVeKhongMoDuoc } from '@/shared/ui/useDichDen';
 import { hetCho, timChoCon } from '../utils/choCon';
 import { hienThiBienSo, tenLoaiXe } from '@/shared/utils/format';
 
@@ -30,6 +31,14 @@ export function XeCuaToiPage() {
     setThanhCong(`Đã gửi đăng ký xe ${hienThiBienSo(bienSo.toUpperCase().replace(/[^0-9A-Z]/g, ''))}. Xe đang chờ Admin duyệt.${nhacHetCho}`);
     await Promise.all([ds.taiLai(), bangGia.taiLai()]);
   }
+
+  // Mở từ thông báo (xe bị từ chối / bị gỡ / gói bị huỷ): ?xe=45 → tô sáng thẻ xe (có lý do, ô tải lại ảnh giấy)
+  const [thamSo] = useThamSoMotLan('xe');
+  const veKhongMoDuoc = useVeKhongMoDuoc();
+  useKhiMoTuThongBao(thamSo, !!ds.duLieu, (t) => {
+    const id = soId(t.xe);
+    if (id !== null && !toSang(`xe-${id}`)) veKhongMoDuoc();
+  });
 
   const cuaToi = ds.duLieu?.filter((x) => x.laChuXe) ?? [];
   const chiaSe = ds.duLieu?.filter((x) => !x.laChuXe) ?? [];

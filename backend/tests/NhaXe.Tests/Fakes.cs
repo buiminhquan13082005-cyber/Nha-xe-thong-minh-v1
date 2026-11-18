@@ -177,13 +177,14 @@ public class FakeNhomGiaDinhModule : INhomGiaDinhModule
 /// <summary>Module ThongBao giả: ghi lại mọi thông báo được gửi để test kiểm tra.</summary>
 public class FakeThongBaoModule : IThongBaoModule
 {
-    public List<(int? TaiKhoanId, string Loai, string NoiDung)> DaGui { get; } = new();
-    public Task GuiAsync(int taiKhoanId, string loai, string noiDung, CancellationToken ct = default)
-    { DaGui.Add((taiKhoanId, loai, noiDung)); return Task.CompletedTask; }
-    public Task GuiChoMoiAdminAsync(string loai, string noiDung, CancellationToken ct = default)
-    { DaGui.Add((null, loai, noiDung)); return Task.CompletedTask; }
-    public Task GuiNhieuAsync(IEnumerable<int> taiKhoanIds, string loai, string noiDung, CancellationToken ct = default)
-    { foreach (var id in taiKhoanIds.Distinct()) DaGui.Add((id, loai, noiDung)); return Task.CompletedTask; }
+    /// <summary>TaiKhoanId null = gửi mọi Admin. Dich: hành động + tham chiếu (bấm vào thì tới đâu).</summary>
+    public List<(int? TaiKhoanId, string Loai, string NoiDung, DichThongBao? Dich)> DaGui { get; } = new();
+    public Task GuiAsync(int taiKhoanId, string loai, string noiDung, DichThongBao? dich = null, CancellationToken ct = default)
+    { DaGui.Add((taiKhoanId, loai, noiDung, dich)); return Task.CompletedTask; }
+    public Task GuiChoMoiAdminAsync(string loai, string noiDung, DichThongBao? dich = null, CancellationToken ct = default)
+    { DaGui.Add((null, loai, noiDung, dich)); return Task.CompletedTask; }
+    public Task GuiNhieuAsync(IEnumerable<int> taiKhoanIds, string loai, string noiDung, DichThongBao? dich = null, CancellationToken ct = default)
+    { foreach (var id in taiKhoanIds.Distinct()) DaGui.Add((id, loai, noiDung, dich)); return Task.CompletedTask; }
 }
 
 public class FakePhiQuaHanStore : IPhiQuaHanStore

@@ -32,8 +32,9 @@ public record XeChonNhanhDto(int XeId, string BienSo, bool TrongBai);
 public record ManHinhCongDto(DateTime BayGio, IReadOnlyList<YeuCauDto> DangCho, IReadOnlyList<SuKienCongDto> GanDay,
                              IReadOnlyList<XeChonNhanhDto> Xe, IReadOnlyList<LuotCanXuLyDto>? CanXuLy = null);
 
+/// <param name="YeuCauKetQua">Kết quả yêu cầu xác nhận ra gần nhất (CHO / DONG_Y / TU_CHOI / HET_HAN), null nếu chưa ra cổng lần nào.</param>
 public record LuotGuiDto(int Id, int XeId, string BienSo, DateTime ThoiGianVao, DateTime? ThoiGianRa, string TrangThai,
-                         decimal? PhiQuaHan = null);
+                         decimal? PhiQuaHan = null, string? YeuCauKetQua = null, DateTime? YeuCauHetHanLuc = null);
 
 /// <summary>Trang Ra vào của khách: yêu cầu cần mình xác nhận và lịch sử ra vào các xe mình được dùng.</summary>
 public record RaVaoCuaToiDto(DateTime BayGio, IReadOnlyList<YeuCauDto> DangCho, IReadOnlyList<LuotGuiDto> LichSu);

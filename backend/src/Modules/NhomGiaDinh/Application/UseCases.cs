@@ -94,7 +94,7 @@ internal static class BaoNhom
     public static async Task ChayAsync(IThongBaoModule? tb, int taiKhoanId, string noiDung, CancellationToken ct)
     {
         if (tb is null || taiKhoanId == 0) return;
-        try { await tb.GuiAsync(taiKhoanId, LoaiThongBao.Nhom, noiDung, ct); }
+        try { await tb.GuiAsync(taiKhoanId, LoaiThongBao.Nhom, noiDung, new DichThongBao(HanhDongThongBao.XemNhom), ct); }
         catch (Exception e) when (e is not OperationCanceledException) { }
     }
 }

@@ -75,7 +75,8 @@ public class NhacSapHetHanUseCase
         {
             var nguoiNhan = NguoiDungXe.Tinh(g.ChuXeId, g.ChiaSeNhom,
                 g.ChiaSeNhom ? await _nhom.LayNguoiCungNhomAsync(g.ChuXeId, ct) : Array.Empty<int>());
-            await _thongBao.GuiNhieuAsync(nguoiNhan, LoaiThongBao.SapHetHan, NoiDungThongBao.SapHetHan(g.TenGoi, g.BienSo, g.HetHanLuc), ct);
+            await _thongBao.GuiNhieuAsync(nguoiNhan, LoaiThongBao.SapHetHan, NoiDungThongBao.SapHetHan(g.TenGoi, g.BienSo, g.HetHanLuc),
+                new DichThongBao(HanhDongThongBao.MuaGoi, g.XeId), ct);
         }
         return ds.Count + await NhacHetHanVaQuaHanAsync(ct);
     }
@@ -92,14 +93,16 @@ public class NhacSapHetHanUseCase
         {
             var no = trongBai.GetValueOrDefault(g.XeId);
             await _thongBao.GuiNhieuAsync(await NguoiNhanAsync(g, ct), LoaiThongBao.HetHan,
-                NoiDungThongBao.DaHetHan(g.TenGoi, g.BienSo, no is null ? null : no.SoTienNo), ct);
+                NoiDungThongBao.DaHetHan(g.TenGoi, g.BienSo, no is null ? null : no.SoTienNo),
+                new DichThongBao(HanhDongThongBao.MuaGoi, g.XeId), ct);
         }
         foreach (var g in quaHan)
         {
             var no = trongBai.GetValueOrDefault(g.XeId);
             if (no is null || no.SoTienNo <= 0) continue;
             await _thongBao.GuiNhieuAsync(await NguoiNhanAsync(g, ct), LoaiThongBao.QuaHan,
-                NoiDungThongBao.NhacQuaHan(g.BienSo, no.SoNgayNo, no.SoTienNo), ct);
+                NoiDungThongBao.NhacQuaHan(g.BienSo, no.SoNgayNo, no.SoTienNo),
+                new DichThongBao(HanhDongThongBao.TraPhi, g.XeId), ct);
         }
         return hetHan.Count + quaHan.Count;
     }

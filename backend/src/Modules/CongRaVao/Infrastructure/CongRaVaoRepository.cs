@@ -72,6 +72,13 @@ public class CongQuery : ICongQuery
         await _db.LuotGui.AsNoTracking().Where(l => xeIds.Contains(l.XeId))
                  .OrderByDescending(l => l.ThoiGianVao).Take(soDong).ToListAsync(ct);
 
+    public async Task<IReadOnlyDictionary<int, YeuCauXacNhan>> LayYeuCauGanNhatAsync(IReadOnlyCollection<int> luotIds, CancellationToken ct)
+    {
+        if (luotIds.Count == 0) return new Dictionary<int, YeuCauXacNhan>();
+        return (await _db.YeuCau.AsNoTracking().Where(y => luotIds.Contains(y.LuotGuiId)).ToListAsync(ct))
+            .GroupBy(y => y.LuotGuiId).ToDictionary(g => g.Key, g => g.MaxBy(y => y.TaoLuc)!);
+    }
+
     public async Task<IReadOnlyList<(LuotGui Luot, string LyDo)>> LayLuotCanXuLyAsync(CancellationToken ct)
     {
         var mo = await _db.LuotGui.AsNoTracking().Where(l => l.ThoiGianRa == null).ToListAsync(ct);

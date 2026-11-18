@@ -85,8 +85,10 @@ public class LayRaVaoCuaToiUseCase
         var phi = new Dictionary<int, decimal>();
         foreach (var l in luot.Where(l => l.TrangThai == TrangThaiLuot.ChoThanhToan))
             phi[l.Id] = await _goiCho.LaySoTienNoAsync(l.XeId, ct);
+        var yc = await _q.LayYeuCauGanNhatAsync(luot.Select(l => l.Id).ToList(), ct);
         var lichSu = luot.Select(l => new LuotGuiDto(l.Id, l.XeId, xe[l.XeId].BienSo, l.ThoiGianVao, l.ThoiGianRa, l.TrangThai,
-                                                     phi.TryGetValue(l.Id, out var p) ? p : null)).ToList();
+                                                     phi.TryGetValue(l.Id, out var p) ? p : null,
+                                                     yc.GetValueOrDefault(l.Id)?.KetQua, yc.GetValueOrDefault(l.Id)?.HetHanLuc)).ToList();
         return new RaVaoCuaToiDto(bayGio, dangCho, lichSu);
     }
 }

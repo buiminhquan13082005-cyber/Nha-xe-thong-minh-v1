@@ -6,6 +6,7 @@ using NhaXe.Modules.GoiCho.Contracts;
 using NhaXe.SharedKernel;
 using NhaXe.Tests.BaiXe;
 using LoaiTB = NhaXe.Modules.ThongBao.Contracts.LoaiThongBao;
+using NhaXe.Modules.ThongBao.Contracts;
 
 namespace NhaXe.Tests.CongRaVao;
 
@@ -88,6 +89,27 @@ public class CongRaVaoUseCaseTests
         _ai.KetQua = new KetQuaDocBienSo("29B112345", .95, false, [new("29B112345", .95)]); // hết gói
         var kq = await new XeVaoUseCase(Ai(), _goiCho, _repo, _phat, _tb, _clock, kho: kho).ThucHienAsync(new AnhCong(null, AnhJpg, "image/jpeg"));
         Assert.False(kq.ChoQua); Assert.Empty(kho.Anh);
+    }
+
+    /// <summary>Lỗi thật 03:42: camera tự quét, mỗi khung AI đọc lệch 1 ký tự nhưng khớp gần đúng về cùng xe hết gói.</summary>
+    [Fact]
+    public async Task Vao_TuDong_DocLech1KyTu_CungXe_Trong30Giay_ChiTuChoiVaBao1Lan()
+    {
+        _goiCho.NguoiDung[2] = new() { 2 };
+        var docLech = new[] { "29B112345", "29B112346", "29B112348", "29B112345" };
+        foreach (var b in docLech)
+        {
+            _ai.KetQua = new KetQuaDocBienSo(b, .95, false, [new(b, .95)]);
+            await Vao().ThucHienAsync(new AnhCong(null, AnhJpg, "image/jpeg", TuDong: true));
+            _clock.BayGio = _clock.BayGio.AddSeconds(1.5);
+        }
+        Assert.Single(_repo.SuKien);
+        Assert.Single(_tb.DaGui, t => t.Loai == LoaiTB.HetHan);
+
+        _clock.BayGio = _clock.BayGio.AddSeconds(30); // xe còn đứng đó sau 30 giây: báo lại một lần
+        _ai.KetQua = new KetQuaDocBienSo("29B112346", .95, false, [new("29B112346", .95)]);
+        await Vao().ThucHienAsync(new AnhCong(null, AnhJpg, "image/jpeg", TuDong: true));
+        Assert.Equal(2, _repo.SuKien.Count);
     }
 
     [Fact]
@@ -229,7 +251,6 @@ public class CongRaVaoUseCaseTests
     [Theory]
     [InlineData("43A99999", "Xe chưa đăng ký")]
     [InlineData("59C-112.233", "Xe chưa được duyệt")]
-    [InlineData("29B1-123.45", "Xe chưa có chỗ hoặc gói đã hết hạn")]
     [InlineData("12", "Biển số sai định dạng")]
     [InlineData("", "Không đọc được biển số")]
     public async Task XeVao_KhongHopLe_TuChoi_VanGhiNhatKy(string bienSo, string lyDo)
@@ -244,11 +265,36 @@ public class CongRaVaoUseCaseTests
     }
 
     [Fact]
-    public async Task XeVao_HetGoi_GuiLoiMoiGiaHan()
+    public async Task XeVao_HetGoi_LyDoGhiRoNgayHetHan_GuiLoiMoiGiaHan_KemMuaGoiVaXeId()
     {
         _goiCho.NguoiDung[2] = new() { 2 };
-        await Vao().ThucHienAsync(new AnhCong("29B112345"));
-        Assert.Contains(_tb.DaGui, t => t.Loai == LoaiTB.HetHan && t.NoiDung.Contains("gia hạn"));
+        var kq = await Vao().ThucHienAsync(new AnhCong("29B1-123.45"));
+        var ngay = _clock.BayGio.AddDays(-1).ToString("dd/MM/yyyy");
+        Assert.False(kq.ChoQua);
+        Assert.Equal($"Gói đã hết hạn ngày {ngay}", kq.ThongDiep);
+        var tb = Assert.Single(_tb.DaGui, t => t.Loai == LoaiTB.HetHan);
+        Assert.Contains($"gói đã hết hạn ngày {ngay}", tb.NoiDung);
+        Assert.Equal(new DichThongBao(HanhDongThongBao.MuaGoi, 2), tb.Dich);
+    }
+
+    [Fact]
+    public async Task XeVao_ChuaTungMuaGoi_LyDoXeChuaCoGoi()
+    {
+        _goiCho.TaiCong["29B155555"] = new XeTaiCong(7, "29B155555", "XE_MAY", 2, true, false, null, 0);
+        _goiCho.NguoiDung[7] = new() { 2 };
+        var kq = await Vao().ThucHienAsync(new AnhCong("29B155555"));
+        Assert.Equal("Xe chưa có gói", kq.ThongDiep);
+        Assert.Contains(_tb.DaGui, t => t.Loai == LoaiTB.HetHan && t.NoiDung.Contains("chưa có gói") && t.Dich == new DichThongBao(HanhDongThongBao.MuaGoi, 7));
+    }
+
+    [Theory]
+    [InlineData(null, "Xe chưa có gói")]
+    [InlineData(-3, "Gói đã hết hạn ngày")]
+    [InlineData(5, "Gói chưa tới ngày bắt đầu")]
+    public void LyDoKhongCoGoi_TachTheoLyDoThat(int? soNgay, string batDau)
+    {
+        var bayGio = new DateTime(2026, 11, 19, 3, 42, 0);
+        Assert.StartsWith(batDau, NoiDungCong.LyDoKhongCoGoi(soNgay is int n ? bayGio.AddDays(n) : null, bayGio));
     }
 
     [Fact]
@@ -281,9 +327,9 @@ public class CongRaVaoUseCaseTests
 
     private sealed class ThongBaoHong : NhaXe.Modules.ThongBao.Contracts.IThongBaoModule
     {
-        public Task GuiAsync(int taiKhoanId, string loai, string noiDung, CancellationToken ct = default) => throw new InvalidOperationException("hỏng");
-        public Task GuiChoMoiAdminAsync(string loai, string noiDung, CancellationToken ct = default) => throw new InvalidOperationException("hỏng");
-        public Task GuiNhieuAsync(IEnumerable<int> ids, string loai, string noiDung, CancellationToken ct = default) => throw new InvalidOperationException("hỏng");
+        public Task GuiAsync(int taiKhoanId, string loai, string noiDung, DichThongBao? dich = null, CancellationToken ct = default) => throw new InvalidOperationException("hỏng");
+        public Task GuiChoMoiAdminAsync(string loai, string noiDung, DichThongBao? dich = null, CancellationToken ct = default) => throw new InvalidOperationException("hỏng");
+        public Task GuiNhieuAsync(IEnumerable<int> ids, string loai, string noiDung, DichThongBao? dich = null, CancellationToken ct = default) => throw new InvalidOperationException("hỏng");
     }
 
     // ------------------------------ Cổng ra ------------------------------
@@ -299,6 +345,8 @@ public class CongRaVaoUseCaseTests
         Assert.Equal("Đang chờ xác nhận", kq.ThongDiep);
         Assert.Equal(TrangThaiLuot.ChoXacNhan, luot.TrangThai);
         Assert.Equal(2, _tb.DaGui.Count(t => t.Loai == LoaiTB.Ra)); // chủ xe và người cùng nhóm
+        // bấm thông báo → trang Ra vào, đúng yêu cầu của lượt này
+        Assert.All(_tb.DaGui.Where(t => t.Loai == LoaiTB.Ra), t => Assert.Equal(new DichThongBao(HanhDongThongBao.XacNhanRa, luot.Id), t.Dich));
 
         _clock.BayGio = _clock.BayGio.AddSeconds(10);
         var lai = await Ra().ThucHienAsync(new AnhCong("30A12345"));
@@ -407,7 +455,8 @@ public class CongRaVaoUseCaseTests
 
         Assert.Equal(KetQuaXacNhan.HetHan, _repo.YeuCau.Single().KetQua);
         Assert.Equal(TrangThaiLuot.DangGui, luot.TrangThai);
-        Assert.Contains(_tb.DaGui, t => t.TaiKhoanId is null && t.NoiDung.Contains("quá 60 giây không ai xác nhận"));
+        Assert.Contains(_tb.DaGui, t => t.TaiKhoanId is null && t.NoiDung.Contains("quá 60 giây không ai xác nhận")
+                                        && t.Dich == new DichThongBao(HanhDongThongBao.XuLyCongRa, luot.Id));
 
         var thieu = await Assert.ThrowsAsync<LoiNghiepVu>(() => MoTay().ThucHienAsync(1, luot.Id, " "));
         Assert.Equal("THIEU_LY_DO", thieu.Ma);

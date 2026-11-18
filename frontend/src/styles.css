@@ -176,6 +176,22 @@ textarea:focus { outline: 2px solid var(--chinh); border-color: transparent; }
 .tb { display: block; width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; border-left: 4px solid var(--loi); }
 .tb p { margin: 8px 0 0; }
 .tb-da-doc { border-left-color: var(--vien); opacity: .8; }
+.tb-than { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.tb-viec { flex: none; align-self: flex-end; font-size: .85rem; font-weight: 600; color: var(--chinh-chu); white-space: nowrap; }
+@media (max-width: 520px) { .tb-than { flex-direction: column; align-items: stretch; } .tb-viec { align-self: flex-end; } }
+
+/* Khung "Lượt cần xử lý" ở trang camera cổng ra (mở từ thông báo Admin) */
+.mc-xu-ly { margin: 0 0 14px; color: var(--chu); }
+
+/* Mở từ thông báo: tô sáng đúng dòng / thẻ 2,5 giây (useDichDen.toSang) */
+.to-sang:not(tr) { animation: to-sang 2.6s ease-out; }
+tr.to-sang > td { animation: to-sang-o 2.6s ease-out; }
+@keyframes to-sang { 0%, 55% { box-shadow: 0 0 0 3px var(--chinh); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@keyframes to-sang-o { 0%, 55% { background: var(--canh-nen); } }
+@media (prefers-reduced-motion: reduce) {
+  .to-sang:not(tr) { animation: none; box-shadow: 0 0 0 3px var(--chinh); }
+  tr.to-sang > td { animation: none; background: var(--canh-nen); }
+}
 
 /* Ảnh giấy đăng ký + duyệt nhanh */
 .anh-gdk { display: block; width: 100%; max-width: 560px; border: 1px solid var(--vien); border-radius: 8px; background: var(--the-2); }

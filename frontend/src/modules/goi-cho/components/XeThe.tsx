@@ -11,7 +11,7 @@ export function XeThe({ xe, onDoi }: { xe: XeDuocDung; onDoi?: () => Promise<voi
   const daDuyet = xe.trangThaiDuyet === 'DA_DUYET';
   const canAnh = xe.laChuXe && (xe.trangThaiDuyet === 'TU_CHOI' || (xe.trangThaiDuyet === 'CHO_DUYET' && !xe.coAnhGiayDangKy));
   return (
-    <article className="the xe-the">
+    <article className="the xe-the" data-dich={`xe-${xe.xeId}`}>
       <div className="xe-dau">
         <div>
           <div className="bien-so">{hienThiBienSo(xe.bienSo)}</div>

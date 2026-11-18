@@ -1,7 +1,14 @@
 import { HttpTransportType, HubConnectionBuilder, LogLevel, type HubConnection } from '@microsoft/signalr';
 
 /** Một sự kiện server đẩy xuống (cùng nội dung vừa lưu vào hộp thư). */
-export interface SuKienThoiGianThuc { loai: string; noiDung: string }
+export interface SuKienThoiGianThuc {
+  /** Id thông báo vừa lưu (bấm thẻ nổi thì đánh dấu đã đọc). Không có ở tín hiệu không lưu hộp thư. */
+  id?: number | null;
+  loai: string;
+  noiDung: string;
+  hanhDong?: string | null;
+  thamChieuId?: number | null;
+}
 
 /**
  * Kênh thời gian thực (DIP): trang chỉ biết interface này, không biết SignalR.

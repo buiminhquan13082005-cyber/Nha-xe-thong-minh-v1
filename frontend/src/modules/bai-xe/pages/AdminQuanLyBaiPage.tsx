@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { soId, toSang, useKhiMoTuThongBao, useThamSoMotLan } from '@/shared/ui/useDichDen';
 import { DangTai, ThongBao } from '@/shared/ui/ui';
 import { useTaiDuLieu } from '@/shared/ui/useTaiDuLieu';
 import { useApp } from '@/app/AppContext';
@@ -21,6 +22,13 @@ export function AdminQuanLyBaiPage() {
   // Số xe trong từng khu: camera khu hướng vào +1, hướng ra −1. Tự tải lại mỗi 5 giây.
   const soXe = useTaiDuLieu(() => services.timXe.laySoXeKhu(), [], 5_000);
   const [tab, setTab] = useState<Tab>('khu');
+  // Mở từ thông báo đối soát: ?diSai=<id> (tô sáng lần đi sai khu) hoặc ?muc=so-xe|di-sai
+  const [thamSo] = useThamSoMotLan('diSai', 'muc');
+  const diSaiMo = soId(thamSo.diSai);
+  useKhiMoTuThongBao(thamSo, !!soXe.duLieu, (t) => {
+    if (t.muc === 'so-xe') requestAnimationFrame(() => toSang('so-xe-khu'));
+    else if (t.muc === 'di-sai' && !t.diSai) requestAnimationFrame(() => toSang('di-sai-khu'));
+  });
   const [tin, setTin] = useState<{ loai: 'ok' | 'loi'; noiDung: string } | null>(null);
   // Mặc định chỉ hiện khu đang dùng (cùng ô đỗ, camera của chúng). Bật ô này để thấy khu tạm tắt (VD Khu A, B ô tô) và bật lại.
   const [hienTat, setHienTat] = useState(false);
@@ -40,12 +48,12 @@ export function AdminQuanLyBaiPage() {
         <h1>Quản lý bãi</h1>
         <button className="nut nut-phu nut-nho" onClick={() => { void ch.taiLai(); void soXe.taiLai(); }} disabled={ch.dangTai}>Tải lại</button>
       </div>
-      <h2>Số xe trong các khu</h2>
+      <h2 data-dich="so-xe-khu">Số xe trong các khu</h2>
       <p className="mo">Camera khu hướng vào nhận diện xe → cộng 1 vào khu; camera hướng ra nhận diện xe → trừ 1. Tự cập nhật mỗi 5 giây.</p>
       {soXe.loi && <ThongBao loai="loi">{soXe.loi}</ThongBao>}
       {/* Chỉ 3 khu xe máy trên bản đồ (R, S, Hầm). Khu ô tô và khu mẫu C, D không hiện (dữ liệu DB vẫn giữ). */}
       {soXe.duLieu && <MucChoKhu khu={khuXeMayTrenSoDo(soXe.duLieu.khu)} chiTiet />}
-      <DiSaiKhuBang />
+      <DiSaiKhuBang moId={diSaiMo} moThamSo={thamSo} />
       <h2>Cấu hình bãi</h2>
       <p className="mo">Khai báo khu, ô đỗ và camera. Mỗi khu nên có 2 camera: một camera soi hướng vào, một camera soi hướng ra.</p>
       <div className="tab">
@@ -90,18 +98,28 @@ const toiDa = (ch: CauHinhBai, loaiXeId: number) =>
 const gioNgay = (iso: string) => new Date(iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
 
 /** Cảnh báo đi sai khu (xe không theo chỉ dẫn) và ai hay đi sai. Chỉ để Admin theo dõi, chưa phạt tự động. Tự tải lại mỗi 15 giây. */
-function DiSaiKhuBang() {
+function DiSaiKhuBang({ moId, moThamSo }: { moId: number | null; moThamSo: object }) {
   const { services } = useApp();
   const ds = useTaiDuLieu(() => services.timXe.layDiSaiKhu(), [], 15_000);
   const d = ds.duLieu;
   const day = d?.ganDay.filter((x) => x.khuDay).length ?? 0;
+  const [mo, setMo] = useState(false);
+  const [tinMo, setTinMo] = useState<string | null>(null);
+  useKhiMoTuThongBao(moThamSo, !!d, () => {
+    if (moId === null) return;
+    setMo(true); setTinMo(null);
+    if (!d?.ganDay.some((x) => x.id === moId)) { setTinMo('Lần đi sai khu này đã cũ, không còn trong danh sách gần đây.'); return; }
+    requestAnimationFrame(() => toSang(`di-sai-${moId}`));
+  });
   return (
-    <details className="the di-sai-khu" open={day > 0}>
+    <details className="the di-sai-khu" open={day > 0 || mo} data-dich="di-sai-khu"
+             onToggle={(e) => setMo((e.target as HTMLDetailsElement).open)}>
       <summary>
         <strong>Đi sai khu</strong>
         {d && <span className="mo"> · {d.ganDay.length} lần gần đây</span>}
         {day > 0 && <span className="nhan nhan-loi">{day} lần tới khu đã đầy</span>}
       </summary>
+      {tinMo && <ThongBao loai="tin">{tinMo}</ThongBao>}
       {ds.loi && <ThongBao loai="loi">{ds.loi}</ThongBao>}
       {d && d.ganDay.length === 0 && <p className="mo">Chưa có xe nào đi sai khu.</p>}
       {d && d.ganDay.length > 0 && (
@@ -111,7 +129,7 @@ function DiSaiKhuBang() {
               <thead><tr><th>Thời gian</th><th>Biển số</th><th>Chủ xe</th><th>Khu được chỉ</th><th>Khu thực tế</th><th></th></tr></thead>
               <tbody>
                 {d.ganDay.map((x) => (
-                  <tr key={x.id}>
+                  <tr key={x.id} data-dich={`di-sai-${x.id}`}>
                     <td>{gioNgay(x.luc)}</td><td className="bien-so nho">{hienThiBienSo(x.bienSo)}</td><td>{x.tenChuXe}</td>
                     <td>{x.khuChiDinh ?? <span className="mo">không có</span>}</td><td>{x.khuThucTe}</td>
                     <td>{x.khuDay ? <span className="nhan nhan-loi">Khu đầy, bị chặn</span> : <span className="nhan">Đỗ khu khác</span>}</td>

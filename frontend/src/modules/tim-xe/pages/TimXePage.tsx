@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { DangTai, ThongBao } from '@/shared/ui/ui';
 import { useTaiDuLieu } from '@/shared/ui/useTaiDuLieu';
 import { useNgheThongBao } from '@/shared/realtime/useNgheThongBao';
+import { Link } from 'react-router-dom';
 import { useApp } from '@/app/AppContext';
+import { soId, toSang, useKhiMoTuThongBao, useThamSoMotLan, useVeKhongMoDuoc } from '@/shared/ui/useDichDen';
 import { dinhDangNgay, hienThiBienSo } from '@/shared/utils/format';
 import type { KhuCho, XeTimXe } from '../models';
 import { TEN_NGUON } from '../models';
 import { MucChoKhu } from '../components/MucChoKhu';
 import { BanDoBai } from '../components/BanDoBai';
 import { DemNguocGiuCho } from '../components/DemNguocGiuCho';
+import { moManHinhDanDuong } from '../components/DieuHuongToanCuc';
 
 /**
  * Trang khách "Tìm xe" (xe máy, mức khu): sau khi qua cổng vào thấy "Mời vào khu X" kèm đường đi và thời gian giữ chỗ;
@@ -22,12 +25,47 @@ export function TimXePage() {
   const trongBai = tx.duLieu?.xe.filter((x) => x.trongBai) ?? [];
   const ngoaiBai = tx.duLieu?.xe.filter((x) => !x.trongBai) ?? [];
 
+  // Mở từ thông báo: ?xe=45 (xe đang đỗ ở khu nào) hoặc ?danDuong=<lượt gửi> (mở màn hình chỉ đường)
+  const [thamSo] = useThamSoMotLan('xe', 'danDuong');
+  const [tinMo, setTinMo] = useState<{ loai: 'tin' | 'canh-bao' | 'loi'; noiDung: string; soDo?: boolean } | null>(null);
+  const veKhongMoDuoc = useVeKhongMoDuoc();
+  useKhiMoTuThongBao(thamSo, !!tx.duLieu, (t) => {
+    setTinMo(null);
+    const luot = soId(t.danDuong);
+    if (luot !== null) { void moDanDuong(luot); return; }
+    const xeId = soId(t.xe);
+    if (xeId === null) return;
+    const x = tx.duLieu?.xe.find((v) => v.xeId === xeId);
+    if (!x) { veKhongMoDuoc(); return; }
+    if (!x.trongBai) { setTinMo({ loai: 'tin', noiDung: `Xe ${hienThiBienSo(x.bienSo)} đã ra khỏi bãi.` }); return; }
+    toSang(`xe-${xeId}`);
+  });
+
+  /** Phiên của đúng lượt gửi đó còn dẫn đường thì mở bản đồ; đã tới / hết giờ / xe đã ra thì nói rõ, không mở. */
+  async function moDanDuong(luot: number) {
+    try {
+      const p = (await services.dieuHuong.layCuaToi()).phien;
+      if (p && p.luotGuiId === luot) {
+        toSang(`xe-${p.xeId}`);
+        if (p.trangThai === 'DANG_DAN') { moManHinhDanDuong(); return; }
+        setTinMo(p.trangThai === 'HET_HAN'
+          ? { loai: 'canh-bao', noiDung: `Phiên chỉ đường tới ${p.khuDich.ten} đã hết giờ giữ chỗ. Xem Sơ đồ chỗ trống để chọn khu còn chỗ.`, soDo: true }
+          : p.khuThucTe
+            ? { loai: 'tin', noiDung: `Phiên chỉ đường đã kết thúc: xe ${hienThiBienSo(p.bienSo)} đã tới ${p.khuThucTe.ten}.` }
+            : { loai: 'tin', noiDung: 'Phiên chỉ đường đã kết thúc.', soDo: true });
+        return;
+      }
+      setTinMo({ loai: 'tin', noiDung: 'Phiên chỉ đường này đã kết thúc (xe đã ra khỏi bãi hoặc đã có lượt gửi mới).', soDo: true });
+    } catch (e) { setTinMo({ loai: 'loi', noiDung: (e as Error).message }); }
+  }
+
   return (
     <>
       <div className="tieu-de-trang">
         <h1>Tìm xe</h1>
         <button className="nut nut-phu nut-nho" onClick={() => tx.taiLai()} disabled={tx.dangTai}>Tải lại</button>
       </div>
+      {tinMo && <ThongBao loai={tinMo.loai}>{tinMo.noiDung}{tinMo.soDo && <> <Link to="/so-do">Mở Sơ đồ chỗ trống</Link></>}</ThongBao>}
       {tx.loi && <ThongBao loai="loi">{tx.loi}</ThongBao>}
       {tx.dangTai && !tx.duLieu && <DangTai />}
       {tx.duLieu && (
@@ -69,7 +107,7 @@ function TheTimXe({ x, bayGio, khu, khiXong }: { x: XeTimXe; bayGio: string; khu
 
   const dangGiu = x.moiVao?.trangThai === 'DANG_GIU' && !x.khuId;
   return (
-    <div className="the the-tim-xe">
+    <div className="the the-tim-xe" data-dich={`xe-${x.xeId}`}>
       <div className="xe-dau">
         <div>
           <div className="bien-so">{hienThiBienSo(x.bienSo)}</div>

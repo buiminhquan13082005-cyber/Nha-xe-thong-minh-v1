@@ -237,9 +237,11 @@ internal static class BaoKetQuaDuyet
 {
     public static async Task GuiAsync(IThongBaoModule thongBao, Xe xe, CancellationToken ct)
     {
-        var noiDung = xe.TrangThaiDuyet == TrangThaiDuyet.DaDuyet
-            ? NoiDungThongBao.XeDaDuyet(xe.BienSo) : NoiDungThongBao.XeBiTuChoi(xe.BienSo, xe.LyDoTuChoi ?? "");
-        try { await thongBao.GuiAsync(xe.ChuXeId, LoaiThongBao.KetQuaDuyet, noiDung, ct); }
+        var daDuyet = xe.TrangThaiDuyet == TrangThaiDuyet.DaDuyet;
+        var noiDung = daDuyet ? NoiDungThongBao.XeDaDuyet(xe.BienSo) : NoiDungThongBao.XeBiTuChoi(xe.BienSo, xe.LyDoTuChoi ?? "");
+        // được duyệt → mua gói cho xe đó; bị từ chối → mở xe đó để tải lại ảnh giấy đăng ký
+        var dich = new DichThongBao(daDuyet ? HanhDongThongBao.MuaGoi : HanhDongThongBao.GuiLaiGiay, xe.Id);
+        try { await thongBao.GuiAsync(xe.ChuXeId, LoaiThongBao.KetQuaDuyet, noiDung, dich, ct); }
         catch (Exception e) when (e is not OperationCanceledException) { /* đã duyệt xong; chủ xe vẫn thấy trạng thái trong "Xe của tôi" */ }
     }
 }
@@ -331,7 +333,8 @@ public class TaiAnhGiayDangKyUseCase
         {
             var ten = (await _taiKhoan.LayHoTenAsync(new[] { xe.ChuXeId }, ct)).GetValueOrDefault(xe.ChuXeId, "?");
             var loai = NoiDungThongBao.TenLoai(await _goi.LayMaLoaiXeAsync(xe.LoaiXeId, ct));
-            await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.XeChoDuyet, NoiDungThongBao.XeChoDuyet(xe.BienSo, loai, ten, guiLai), ct);
+            await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.XeChoDuyet, NoiDungThongBao.XeChoDuyet(xe.BienSo, loai, ten, guiLai),
+                new DichThongBao(HanhDongThongBao.DuyetXe, xe.Id), ct);
         }
         catch (Exception e) when (e is not OperationCanceledException) { /* ảnh đã lưu; badge "Quản lý xe" vẫn đếm được xe này */ }
     }
@@ -411,10 +414,12 @@ public class HuyGoiUseCase
         var hoan = _chinhSach.Tinh(goi, bayGio);
         await _store.HuyGoiAsync(taiKhoanId, goi.Id, hoan.SoTien, ld, gy, ct);
 
-        await _thongBao.GuiAsync(taiKhoanId, LoaiThongBao.HuyGoi, NoiDungThongBao.KhachDaHuy(goi.TenGoi, goi.BienSo, hoan.SoTien), ct);
+        await _thongBao.GuiAsync(taiKhoanId, LoaiThongBao.HuyGoi, NoiDungThongBao.KhachDaHuy(goi.TenGoi, goi.BienSo, hoan.SoTien),
+            new DichThongBao(HanhDongThongBao.XemXe, goi.XeId), ct);
         var khach = (await _taiKhoan.LayLienHeAsync(new[] { taiKhoanId }, ct)).GetValueOrDefault(taiKhoanId);
         await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.KhachHuy,
-            NoiDungThongBao.BaoAdminKhachHuy(khach?.HoTen ?? "?", khach?.Sdt ?? "?", goi.TenGoi, goi.BienSo, hoan.SoTien, ld, gy), ct);
+            NoiDungThongBao.BaoAdminKhachHuy(khach?.HoTen ?? "?", khach?.Sdt ?? "?", goi.TenGoi, goi.BienSo, hoan.SoTien, ld, gy),
+            new DichThongBao(HanhDongThongBao.XemXeAdmin, goi.XeId), ct);
         return new XemHuyGoiDto(goi.Id, goi.TenGoi, goi.ChuaBatDau(bayGio), hoan.SoNgayConLai, hoan.SoTien);
     }
 }
@@ -433,6 +438,7 @@ public class GoXeUseCase
                  ?? throw new LoiNghiepVu(LoaiLoi.KhongTimThay, "KHONG_TIM_THAY_XE", "Không tìm thấy xe.");
         xe.KiemTraGoDuoc(lyDo);
         await _store.GoXeAsync(adminId, xeId, lyDo!.Trim(), ct);
-        await _thongBao.GuiAsync(xe.ChuXeId, LoaiThongBao.XeBiGo, NoiDungThongBao.XeBiGo(xe.BienSo, lyDo.Trim()), ct);
+        await _thongBao.GuiAsync(xe.ChuXeId, LoaiThongBao.XeBiGo, NoiDungThongBao.XeBiGo(xe.BienSo, lyDo.Trim()),
+            new DichThongBao(HanhDongThongBao.XemXe, xe.Id), ct);
     }
 }

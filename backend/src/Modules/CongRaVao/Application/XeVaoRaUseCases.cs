@@ -46,6 +46,16 @@ internal static class TuQuet
         if (bien is null) return true;
         return await repo.CoSuKienTuAsync(cong, bien, bayGio - XeVaoUseCase.ChongLap, ct);
     }
+
+    /// <summary>
+    /// Kiểm tra lần hai bằng biển số CỦA XE sau khi tra (khớp gần đúng): camera tự quét mỗi giây, AI có thể đọc lệch 1 ký tự
+    /// ở mỗi khung (36C239396, 36C23939S...) nên khoá ở lần kiểm tra đầu khác nhau, nhưng đều khớp về cùng một xe.
+    /// Lỗi thật 19/11/2026 03:42: xe 36C239395 bị từ chối + gửi thông báo 6 lần trong 7 giây.
+    /// </summary>
+    public static async Task<bool> DaXuLyXeNayAsync(ICongRaVaoRepository repo, AnhCong anh, string cong, KetQuaNhanDien nd, string? bienXe,
+                                                   DateTime bayGio, CancellationToken ct) =>
+        anh.TuDong && bienXe is not null && bienXe != nd.BienSo
+        && await repo.CoSuKienTuAsync(cong, bienXe, bayGio - XeVaoUseCase.ChongLap, ct);
 }
 
 /// <summary>Xe tới cổng VÀO: đọc biển → tra xe → kiểm gói, loại biển, trùng lượt → mở lượt gửi hoặc từ chối. Lần nào cũng ghi nhật ký.</summary>
@@ -89,13 +99,15 @@ public class XeVaoUseCase
         var tra = await TraBienSo.TimAsync(_goiCho, nd, null, ct);
         if (tra.LyDo is not null) return await TuChoi(nd.BienSo, nd.DoTinCay, tra.LyDo, bayGio, ct, tra.UngVien);
         var xe = tra.Xe;
+        if (await TuQuet.DaXuLyXeNayAsync(_repo, anh, SuKienCong.Vao, nd, xe?.BienSo, bayGio, ct))
+            return new KetQuaCongDto(SuKienCong.Vao, false, false, xe!.BienSo, "Bỏ qua khung hình", KhongThayBien: true);
 
         // Thứ tự kiểm tra = thứ tự lý do hiện trên màn hình cổng (đề cương v10, UC-U06 bước 3)
         var lyDo = xe switch
         {
             null => "Xe chưa đăng ký",
             { DaDuyet: false } => "Xe chưa được duyệt",
-            { CoGoiHieuLuc: false } => "Xe chưa có chỗ hoặc gói đã hết hạn",
+            { CoGoiHieuLuc: false } => NoiDungCong.LyDoKhongCoGoi(xe.HetHanLuc, bayGio),
             _ => null
         };
         if (lyDo is not null)
@@ -103,7 +115,8 @@ public class XeVaoUseCase
             var kq = await TuChoi(xe?.BienSo ?? nd.BienSo, nd.DoTinCay, lyDo, bayGio, ct);
             if (xe is { DaDuyet: true, CoGoiHieuLuc: false }) // lời mời gia hạn cho người dùng xe
                 await BaoSauKhiLuu.ChayAsync(async () => await _thongBao.GuiNhieuAsync(await _goiCho.LayNguoiDungXeAsync(xe.XeId, ct),
-                    LoaiThongBao.HetHan, NoiDungCong.MoiGiaHan(xe.BienSo), ct), _log);
+                    LoaiThongBao.HetHan, NoiDungCong.MoiMuaGoi(xe.BienSo, xe.HetHanLuc, bayGio),
+                    new DichThongBao(HanhDongThongBao.MuaGoi, xe.XeId), ct), _log);
             return kq;
         }
 
@@ -115,7 +128,8 @@ public class XeVaoUseCase
         if (await _repo.TimLuotMoCuaXeAsync(xe!.XeId, ct) is not null)
         {
             var kq = await TuChoi(xe.BienSo, nd.DoTinCay, "Xe này đang có lượt gửi chưa kết thúc (có thể biển bị trùng / làm giả)", bayGio, ct);
-            await BaoSauKhiLuu.ChayAsync(() => _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.DoiSoat, NoiDungCong.TrungLuot(xe.BienSo), ct), _log);
+            await BaoSauKhiLuu.ChayAsync(() => _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.DoiSoat, NoiDungCong.TrungLuot(xe.BienSo),
+                new DichThongBao(HanhDongThongBao.XemCongVao), ct), _log);
             return kq;
         }
 
@@ -132,7 +146,8 @@ public class XeVaoUseCase
         // SAU khi lưu xong mới báo ra ngoài. TimXe nghe XeDaVao để chọn khu và giữ suất 5 phút.
         await BaoSauKhiLuu.ChayAsync(() => _phat.PhatAsync(new XeDaVao(luot.Id, xe.XeId, bayGio), ct), _log);
         await BaoSauKhiLuu.ChayAsync(async () =>
-            await _thongBao.GuiNhieuAsync(await _goiCho.LayNguoiDungXeAsync(xe.XeId, ct), LoaiThongBao.Vao, NoiDungCong.DaVao(xe.BienSo, bayGio), ct), _log);
+            await _thongBao.GuiNhieuAsync(await _goiCho.LayNguoiDungXeAsync(xe.XeId, ct), LoaiThongBao.Vao, NoiDungCong.DaVao(xe.BienSo, bayGio),
+                new DichThongBao(HanhDongThongBao.XemLuot, luot.Id), ct), _log);
         return new KetQuaCongDto(SuKienCong.Vao, true, false, xe.BienSo, "Mời xe vào", luot.Id, DoTinCay: nd.DoTinCay,
                                  LoaiBien: nd.LoaiBien, KhopGanDung: tra.GanDung, XeId: xe.XeId,
                                  ThoiGianVao: luot.ThoiGianVao, CoAnhVao: anhVao is not null);
@@ -190,12 +205,14 @@ public class XeRaUseCase
         var tra = await TraBienSo.TimAsync(_goiCho, nd, trongBai, ct);
         if (tra.LyDo is not null) return await TuChoi(nd.BienSo, nd.DoTinCay, null, tra.LyDo, bayGio, ct, tra.UngVien);
         var xe = tra.Xe;
+        if (await TuQuet.DaXuLyXeNayAsync(_repo, anh, SuKienCong.Ra, nd, xe?.BienSo, bayGio, ct))
+            return new KetQuaCongDto(SuKienCong.Ra, false, false, xe!.BienSo, "Bỏ qua khung hình", KhongThayBien: true);
         var luot = xe is null ? null : await _repo.TimLuotMoCuaXeAsync(xe.XeId, ct);
         if (xe is null || luot is null)
         {
             var kq = await TuChoi(xe?.BienSo ?? nd.BienSo, nd.DoTinCay, null, "Không thấy lượt gửi đang mở của xe này: đã báo Admin", bayGio, ct);
             await BaoSauKhiLuu.ChayAsync(() => _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.DoiSoat,
-                NoiDungCong.KhongThayLuot(xe?.BienSo ?? nd.BienSo), ct), _log);
+                NoiDungCong.KhongThayLuot(xe?.BienSo ?? nd.BienSo), new DichThongBao(HanhDongThongBao.XuLyCongRa), ct), _log);
             return kq;
         }
 
@@ -227,7 +244,7 @@ public class XeRaUseCase
 
         await BaoSauKhiLuu.ChayAsync(async () =>
             await _thongBao.GuiNhieuAsync(await _goiCho.LayNguoiDungXeAsync(xe.XeId, ct), LoaiThongBao.Ra,
-                                          NoiDungCong.ChoXacNhan(xe.BienSo, soGiay), ct), _log);
+                                          NoiDungCong.ChoXacNhan(xe.BienSo, soGiay), new DichThongBao(HanhDongThongBao.XacNhanRa, luot.Id), ct), _log);
         return DangChoXacNhan(xe.BienSo, luot, yc, bayGio, "Đang chờ xác nhận") with { KhopGanDung = tra.GanDung };
     }
 

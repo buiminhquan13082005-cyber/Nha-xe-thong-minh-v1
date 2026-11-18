@@ -14,10 +14,13 @@ export function MuaGoiPage() {
   const dsXe = useTaiDuLieu(() => services.xe.layDanhSach());
   const bangGia = useTaiDuLieu(() => services.goiCho.layBangGia());
 
-  const xeDuocChon = useMemo(() => {
-    const ds = dsXe.duLieu?.filter((x) => x.trangThaiDuyet === 'DA_DUYET') ?? [];
-    return ds.find((x) => x.xeId === Number(params.get('xe'))) ?? ds[0] ?? null;
-  }, [dsXe.duLieu, params]);
+  const dsDuyet = useMemo(() => dsXe.duLieu?.filter((x) => x.trangThaiDuyet === 'DA_DUYET') ?? [], [dsXe.duLieu]);
+  // ?xe= trỏ tới xe không mua được (chưa duyệt, bị gỡ, không còn thuộc tài khoản): KHÔNG tự chọn xe khác, báo rõ để không mua nhầm
+  const xeYeuCau = params.get('xe');
+  const xeDuocChon = useMemo(
+    () => (xeYeuCau !== null ? dsDuyet.find((x) => x.xeId === Number(xeYeuCau)) ?? null : dsDuyet[0] ?? null),
+    [dsDuyet, xeYeuCau]);
+  const xeKhongMuaDuoc = xeYeuCau !== null && !!dsXe.duLieu && !xeDuocChon;
 
   const lichSu = useTaiDuLieu(
     () => (xeDuocChon ? services.xe.layLichSuGoi(xeDuocChon.xeId) : Promise.resolve([])),
@@ -43,6 +46,26 @@ export function MuaGoiPage() {
 
   if (dsXe.dangTai && !dsXe.duLieu) return <DangTai />;
   if (dsXe.loi) return <ThongBao loai="loi">{dsXe.loi}</ThongBao>;
+  if (xeKhongMuaDuoc) {
+    const xe = dsXe.duLieu?.find((x) => x.xeId === Number(xeYeuCau));
+    return (
+      <>
+        <h1>Mua / gia hạn gói</h1>
+        <ThongBao loai="loi">
+          {xe ? `Xe ${hienThiBienSo(xe.bienSo)} hiện không mua gói được (chưa được duyệt hoặc đã bị gỡ).`
+              : 'Xe này hiện không mua gói được (không còn thuộc tài khoản của bạn hoặc đã bị gỡ).'}
+        </ThongBao>
+        {dsDuyet.length > 0 ? (
+          <div className="hang-nut">
+            <span className="mo">Chọn xe khác:</span>
+            {dsDuyet.map((x) => (
+              <button key={x.xeId} className="nut nut-phu nut-nho" onClick={() => setParams({ xe: String(x.xeId) })}>{hienThiBienSo(x.bienSo)}</button>
+            ))}
+          </div>
+        ) : <p><Link to="/xe">Mở Xe của tôi</Link></p>}
+      </>
+    );
+  }
   if (!xeDuocChon) return <ThongBao loai="tin">Chưa có xe đã duyệt. Vào <Link to="/xe">Xe của tôi</Link> để đăng ký xe.</ThongBao>;
 
   const cho = bangGia.duLieu?.choConBan.find((c) => c.loaiXeId === xeDuocChon.loaiXeId);

@@ -58,7 +58,8 @@ public class AdminHuyGoiUseCase
         var hoan = chinhSach.Tinh(goi, bayGio);
         await _store.AdminHuyGoiAsync(adminId, goi.Id, lenh.LyDo!.Trim(), hoan.SoTien, ct);
         await _thongBao.GuiAsync(goi.ChuXeId, LoaiThongBao.HuyGoi,
-            NoiDungThongBao.AdminDaHuy(goi.TenGoi, goi.BienSo, lenh.LyDo.Trim(), hoan.SoTien), ct);
+            NoiDungThongBao.AdminDaHuy(goi.TenGoi, goi.BienSo, lenh.LyDo.Trim(), hoan.SoTien),
+            new DichThongBao(HanhDongThongBao.XemXe, goi.XeId), ct);
         return new XemHuyGoiDto(goi.Id, goi.TenGoi, goi.ChuaBatDau(bayGio), hoan.SoNgayConLai, hoan.SoTien);
     }
 }

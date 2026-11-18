@@ -9,6 +9,7 @@ using NhaXe.Modules.TaiKhoan.Application;
 using NhaXe.Modules.TaiKhoan.Contracts;
 using NhaXe.SharedKernel;
 using GoiChoEntity = NhaXe.Modules.GoiCho.Domain.GoiCho;
+using NhaXe.Modules.ThongBao.Contracts;
 using LoaiTB = NhaXe.Modules.ThongBao.Contracts.LoaiThongBao;
 using TK = NhaXe.Modules.TaiKhoan.Domain.TaiKhoan;
 
@@ -80,6 +81,7 @@ public class QuanLyXeTests
         var tb = Assert.Single(_tb.DaGui);
         Assert.Equal((null, LoaiTB.XeChoDuyet), (tb.TaiKhoanId, tb.Loai));
         Assert.Equal("Có xe mới chờ duyệt: 29A12345 (xe máy) của TK4.", tb.NoiDung);
+        Assert.Equal(new DichThongBao(HanhDongThongBao.DuyetXe, 9), tb.Dich); // Admin bấm → tab Chờ duyệt, đúng xe 9
 
         await TaiAnh().ThucHienAsync(4, 9, new MemoryStream(Png), Png.Length); // thay ảnh, xe vẫn đang chờ
         Assert.Single(_tb.DaGui);
@@ -103,6 +105,7 @@ public class QuanLyXeTests
         Assert.Equal((TrangThaiDuyet.DaDuyet, (DateTime?)T0, (int?)1), (_xe.Ds[0].TrangThaiDuyet, _xe.Ds[0].DuyetLuc, _xe.Ds[0].DuyetBoiId));
         var tb = Assert.Single(_tb.DaGui);
         Assert.Equal((4, LoaiTB.KetQuaDuyet, "Xe 29A12345 đã được duyệt, bạn có thể mua gói."), (tb.TaiKhoanId!.Value, tb.Loai, tb.NoiDung));
+        Assert.Equal(new DichThongBao(HanhDongThongBao.MuaGoi, 9), tb.Dich); // chủ xe bấm → Mua gói, chọn sẵn xe 9
     }
 
     [Fact]
@@ -115,7 +118,9 @@ public class QuanLyXeTests
 
         await uc.ThucHienAsync(1, 9, false, "Ảnh mờ, không đọc được");
         Assert.Null(_xe.Ds[0].DuyetLuc);
-        Assert.StartsWith("Xe 29A12345 bị từ chối: Ảnh mờ, không đọc được.", Assert.Single(_tb.DaGui).NoiDung);
+        var tb = Assert.Single(_tb.DaGui);
+        Assert.StartsWith("Xe 29A12345 bị từ chối: Ảnh mờ, không đọc được.", tb.NoiDung);
+        Assert.Equal(new DichThongBao(HanhDongThongBao.GuiLaiGiay, 9), tb.Dich);
     }
 
     [Fact]

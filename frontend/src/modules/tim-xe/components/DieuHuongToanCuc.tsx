@@ -14,6 +14,10 @@ const MOI_TRONG_MS = 30 * 60_000;
 const daXem = (khoa: string) => { try { return sessionStorage.getItem(`dh:${khoa}`) === '1'; } catch { return false; } };
 const ghiDaXem = (khoa: string) => { try { sessionStorage.setItem(`dh:${khoa}`, '1'); } catch { /* chế độ riêng tư: bỏ qua */ } };
 
+const SU_KIEN_MO = 'nx:mo-dan-duong';
+/** Trang khác (Tìm xe, khi bấm thông báo "Mời vào khu …") yêu cầu bật màn hình chỉ đường. */
+export function moManHinhDanDuong() { window.dispatchEvent(new Event(SU_KIEN_MO)); }
+
 /** Khoá "sự kiện" để tự bật màn hình đúng một lần: phiên mới, đổi trạng thái, hoặc báo hết chỗ. */
 function khoaSuKien(d: DieuHuongCuaToi): { khoa: string; luc: string } | null {
   if (d.phien) return { khoa: `${d.phien.id}:${d.phien.trangThai}`, luc: d.phien.khuThucTe?.vaoLuc ?? d.phien.batDauLuc };
@@ -55,6 +59,11 @@ export function DieuHuongToanCuc() {
     return () => window.clearInterval(id);
   }, [tai, dangDan]);
   useNgheThongBao((s) => { if (['KHU', 'VAO', 'RA', 'DIEU_HUONG'].includes(s.loai)) void tai(); });
+  useEffect(() => {
+    const mo = () => { void tai().then(() => setMo(true)); };
+    window.addEventListener(SU_KIEN_MO, mo);
+    return () => window.removeEventListener(SU_KIEN_MO, mo);
+  }, [tai]);
 
   async function doiKhu(khuId: number) {
     await services.dieuHuong.doiKhuDich(khuId);

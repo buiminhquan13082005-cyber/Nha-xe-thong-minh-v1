@@ -10,6 +10,13 @@ public interface IThongBaoStore
     Task<bool> DanhDauDaDocAsync(int taiKhoanId, int thongBaoId, CancellationToken ct);
     /// <returns>Số thông báo vừa được đánh dấu đã đọc.</returns>
     Task<int> DocHetAsync(int taiKhoanId, CancellationToken ct);
-    /// <summary>Ghi một thông báo cho từng tài khoản, theo đúng thứ tự danh sách.</summary>
-    Task ThemAsync(IReadOnlyList<int> taiKhoanIds, string loai, string noiDung, CancellationToken ct);
+    /// <summary>
+    /// Ghi một thông báo cho từng tài khoản. Chống gửi lặp: tài khoản đã nhận đúng thông báo đó (cùng loại, cùng nội dung,
+    /// cùng tham chiếu) trong <paramref name="chongLapGiay"/> giây thì bỏ qua. Trả về các bản ghi THỰC SỰ đã thêm.
+    /// </summary>
+    Task<IReadOnlyList<TinDaLuu>> ThemAsync(IReadOnlyList<int> taiKhoanIds, string loai, string noiDung, string? hanhDong, int? thamChieuId,
+                                            int chongLapGiay, CancellationToken ct);
 }
+
+/// <summary>Một thông báo vừa lưu: id để đẩy SignalR (bấm thẻ nổi thì đánh dấu đúng thông báo đó đã đọc).</summary>
+public record TinDaLuu(int TaiKhoanId, int Id);

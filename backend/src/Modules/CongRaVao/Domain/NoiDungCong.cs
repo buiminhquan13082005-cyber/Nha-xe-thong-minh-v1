@@ -19,8 +19,25 @@ public static class NoiDungCong
         $"Xe {bienSo} đã được {ten} xác nhận nhưng còn phí quá hạn {Tien(soTien)} đ. Trả phí trên ứng dụng, barrier sẽ mở ngay.";
     public static string HetGioChoAdmin(string bienSo) =>
         $"Xe {bienSo} ở cổng ra: quá 60 giây không ai xác nhận, cổng không mở. Admin kiểm tra và mở tay nếu hợp lệ.";
-    public static string MoiGiaHan(string bienSo) =>
-        $"Xe {bienSo} vừa tới cổng vào nhưng chưa có chỗ hoặc gói đã hết hạn. Mua / gia hạn gói trên ứng dụng rồi quay lại.";
+    /// <summary>
+    /// Lý do cổng vào từ chối xe đã duyệt mà không có gói đang hiệu lực, tách theo lý do thật (thay cho câu chung
+    /// "chưa có chỗ hoặc gói đã hết hạn"): chưa từng mua / gói đã hết hạn ngày … / gói đã mua nhưng chưa tới ngày bắt đầu.
+    /// hetHanLuc: ngày kết thúc muộn nhất của các gói không bị huỷ (null = chưa có gói nào).
+    /// </summary>
+    public static string LyDoKhongCoGoi(DateTime? hetHanLuc, DateTime bayGio) => hetHanLuc switch
+    {
+        null => "Xe chưa có gói",
+        var h when h <= bayGio => $"Gói đã hết hạn ngày {h:dd/MM/yyyy}",
+        _ => "Gói chưa tới ngày bắt đầu",
+    };
+
+    /// <summary>Lời mời mua / gia hạn gửi người dùng xe, theo đúng lý do bị từ chối ở cổng vào.</summary>
+    public static string MoiMuaGoi(string bienSo, DateTime? hetHanLuc, DateTime bayGio) => hetHanLuc switch
+    {
+        null => $"Xe {bienSo} vừa tới cổng vào nhưng chưa có gói. Mua gói trên ứng dụng rồi quay lại.",
+        var h when h <= bayGio => $"Xe {bienSo} vừa tới cổng vào nhưng gói đã hết hạn ngày {h:dd/MM/yyyy}. Gia hạn gói trên ứng dụng rồi quay lại.",
+        _ => $"Xe {bienSo} vừa tới cổng vào nhưng gói chưa tới ngày bắt đầu. Xem lịch sử gói trên ứng dụng.",
+    };
     public static string TrungLuot(string bienSo) =>
         $"Xe {bienSo} tới cổng vào trong khi đang có lượt gửi chưa kết thúc. Kiểm tra biển trùng hoặc giả.";
     public static string KhongThayLuot(string bienSo) =>

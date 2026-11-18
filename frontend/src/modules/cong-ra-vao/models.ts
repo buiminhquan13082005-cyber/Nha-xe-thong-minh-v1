@@ -78,7 +78,12 @@ export interface ManHinhCong { bayGio: string; dangCho: YeuCauXacNhan[]; ganDay:
 
 export type TrangThaiLuot = 'DANG_GUI' | 'CHO_XAC_NHAN' | 'DA_RA' | 'NGHI_MAT' | 'CHO_THANH_TOAN';
 
-export interface LuotGui { id: number; xeId: number; bienSo: string; thoiGianVao: string; thoiGianRa: string | null; trangThai: TrangThaiLuot; phiQuaHan?: number | null }
+export interface LuotGui {
+  id: number; xeId: number; bienSo: string; thoiGianVao: string; thoiGianRa: string | null; trangThai: TrangThaiLuot; phiQuaHan?: number | null;
+  /** Yêu cầu xác nhận ra gần nhất của lượt (để báo "đã hết hạn lúc …" khi mở từ thông báo cũ). */
+  yeuCauKetQua?: 'CHO' | 'DONG_Y' | 'TU_CHOI' | 'HET_HAN' | null;
+  yeuCauHetHanLuc?: string | null;
+}
 
 export interface RaVaoCuaToi { bayGio: string; dangCho: YeuCauXacNhan[]; lichSu: LuotGui[] }
 
