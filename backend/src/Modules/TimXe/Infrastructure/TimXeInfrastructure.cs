@@ -13,6 +13,7 @@ public class TimXeDbContext(DbContextOptions<TimXeDbContext> o) : DbContext(o)
 {
     public DbSet<GiuChoKhu> Giu => Set<GiuChoKhu>();
     public DbSet<ViTriXe> ViTri => Set<ViTriXe>();
+    public DbSet<DiSaiKhu> DiSai => Set<DiSaiKhu>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -27,6 +28,24 @@ public class TimXeDbContext(DbContextOptions<TimXeDbContext> o) : DbContext(o)
             e.Property(x => x.HetHanLuc).HasColumnName("het_han_luc").HasColumnType("datetime2(0)");
             e.Property(x => x.TrangThai).HasColumnName("trang_thai").HasMaxLength(10).IsUnicode(false);
             e.Property(x => x.KetThucLuc).HasColumnName("ket_thuc_luc").HasColumnType("datetime2(0)");
+            e.Property(x => x.KhuGoiYId).HasColumnName("khu_goi_y_id");
+            e.Property(x => x.KhuThucTeId).HasColumnName("khu_thuc_te_id");
+            e.Property(x => x.CanhBaoKhuId).HasColumnName("canh_bao_khu_id");
+            e.Property(x => x.CanhBaoLuc).HasColumnName("canh_bao_luc").HasColumnType("datetime2(0)");
+        });
+        b.Entity<DiSaiKhu>(e =>
+        {
+            e.ToTable("di_sai_khu", "dbo");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.LuotGuiId).HasColumnName("luot_gui_id");
+            e.Property(x => x.XeId).HasColumnName("xe_id");
+            e.Property(x => x.ChuXeId).HasColumnName("chu_xe_id");
+            e.Property(x => x.BienSo).HasColumnName("bien_so").HasMaxLength(15).IsUnicode(false);
+            e.Property(x => x.KhuChiDinhId).HasColumnName("khu_chi_dinh_id");
+            e.Property(x => x.KhuThucTeId).HasColumnName("khu_thuc_te_id");
+            e.Property(x => x.KhuDay).HasColumnName("khu_day");
+            e.Property(x => x.Luc).HasColumnName("luc").HasColumnType("datetime2(0)");
         });
         b.Entity<ViTriXe>(e =>
         {
@@ -54,8 +73,27 @@ public class TimXeRepository(TimXeDbContext db) : ITimXeRepository
         await db.Giu.AsNoTracking().Where(g => g.TrangThai == TrangThaiGiu.DangGiu && g.HetHanLuc > bayGio)
             .GroupBy(g => g.KhuId).Select(g => new { g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.N, ct);
 
-    public async Task<IReadOnlyList<GiuChoKhu>> LayGiuQuaHanAsync(DateTime bayGio, CancellationToken ct) =>
-        await db.Giu.Where(g => g.TrangThai == TrangThaiGiu.DangGiu && g.HetHanLuc <= bayGio).ToListAsync(ct);
+    /// <summary>Một câu UPDATE ... OUTPUT: đổi trạng thái và lấy các suất vừa đổi cùng lúc, hai bản API không lấy trùng.</summary>
+    public async Task<IReadOnlyList<GiuChoKhu>> KetThucQuaHanAsync(DateTime bayGio, CancellationToken ct) =>
+        await db.Giu.FromSql($"""
+            UPDATE dbo.giu_cho_khu
+            SET trang_thai = 'HET_HAN', ket_thuc_luc = CASE WHEN {bayGio} < bat_dau_luc THEN bat_dau_luc ELSE {bayGio} END
+            OUTPUT inserted.*
+            WHERE trang_thai = 'DANG_GIU' AND het_han_luc <= {bayGio}
+            """).AsNoTracking().ToListAsync(ct);
+
+    public async Task<DateTime?> LayLanSaiCuoiAsync(int luotGuiId, int khuId, CancellationToken ct) =>
+        await db.DiSai.AsNoTracking().Where(d => d.LuotGuiId == luotGuiId && d.KhuThucTeId == khuId)
+            .OrderByDescending(d => d.Luc).Select(d => (DateTime?)d.Luc).FirstOrDefaultAsync(ct);
+
+    public async Task<IReadOnlyList<DiSaiKhu>> LayDiSaiGanDayAsync(int soDong, CancellationToken ct) =>
+        await db.DiSai.AsNoTracking().OrderByDescending(d => d.Luc).ThenByDescending(d => d.Id).Take(soDong).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<DemDiSai>> DemDiSaiTheoChuXeAsync(CancellationToken ct) =>
+        (await db.DiSai.AsNoTracking().GroupBy(d => d.ChuXeId)
+            .Select(g => new { g.Key, SoLan = g.Count(), KhuDay = g.Count(x => x.KhuDay), LanCuoi = g.Max(x => x.Luc) })
+            .OrderByDescending(x => x.SoLan).ThenByDescending(x => x.LanCuoi).Take(50).ToListAsync(ct))
+        .Select(x => new DemDiSai(x.Key, x.SoLan, x.KhuDay, x.LanCuoi)).ToList();
 
     public Task<ViTriXe?> LayGhiCuoiAsync(int luotGuiId, CancellationToken ct) =>
         db.ViTri.AsNoTracking().Where(v => v.LuotGuiId == luotGuiId).OrderByDescending(v => v.ThayLuc).ThenByDescending(v => v.Id).FirstOrDefaultAsync(ct);
@@ -84,6 +122,7 @@ public class TimXeRepository(TimXeDbContext db) : ITimXeRepository
 
     public void Them(GiuChoKhu g) => db.Giu.Add(g);
     public void Them(ViTriXe v) => db.ViTri.Add(v);
+    public void Them(DiSaiKhu d) => db.DiSai.Add(d);
     public Task LuuAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
 }
 

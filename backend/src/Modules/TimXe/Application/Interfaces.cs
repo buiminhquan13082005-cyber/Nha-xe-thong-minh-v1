@@ -9,8 +9,11 @@ public interface ITimXeRepository
     Task<GiuChoKhu?> TimGiuDangGiuAsync(int luotGuiId, CancellationToken ct);
     /// <summary>Số suất DANG_GIU còn hạn theo khu.</summary>
     Task<IReadOnlyDictionary<int, int>> DemGiuTheoKhuAsync(DateTime bayGio, CancellationToken ct);
-    /// <summary>Suất DANG_GIU đã quá hạn (tác vụ nền trả suất).</summary>
-    Task<IReadOnlyList<GiuChoKhu>> LayGiuQuaHanAsync(DateTime bayGio, CancellationToken ct);
+    /// <summary>
+    /// Đổi mọi suất DANG_GIU đã quá giờ thành HET_HAN bằng MỘT câu UPDATE ... OUTPUT và trả các suất vừa đổi.
+    /// Hai bản API chạy cùng lúc thì mỗi suất chỉ một bản nhận được (không báo người dùng hai lần).
+    /// </summary>
+    Task<IReadOnlyList<GiuChoKhu>> KetThucQuaHanAsync(DateTime bayGio, CancellationToken ct);
     /// <summary>Lần ghi gần nhất của lượt gửi (mọi nguồn) và lần gần nhất tại một camera (chống đọc lặp).</summary>
     Task<ViTriXe?> LayGhiCuoiAsync(int luotGuiId, CancellationToken ct);
     Task<DateTime?> LayLanCuoiTaiCameraAsync(int luotGuiId, int cameraId, CancellationToken ct);
@@ -18,10 +21,19 @@ public interface ITimXeRepository
     Task<IReadOnlyDictionary<int, GiuChoKhu>> LayGiuGanNhatAsync(IReadOnlyCollection<int> luotGuiIds, CancellationToken ct);
     Task<ThongKeDinhVi> LayThongKeAsync(DateTime tu, DateTime den, CancellationToken ct);
 
+    /// <summary>Lần đi sai gần nhất của lượt gửi tại khu (chống báo lặp khi camera tự quét mỗi giây).</summary>
+    Task<DateTime?> LayLanSaiCuoiAsync(int luotGuiId, int khuId, CancellationToken ct);
+    Task<IReadOnlyList<DiSaiKhu>> LayDiSaiGanDayAsync(int soDong, CancellationToken ct);
+    /// <summary>Số lần đi sai theo chủ xe (Admin xem ai hay đi sai). Nhiều lần nhất trước.</summary>
+    Task<IReadOnlyList<DemDiSai>> DemDiSaiTheoChuXeAsync(CancellationToken ct);
+
     void Them(GiuChoKhu g);
     void Them(ViTriXe v);
+    void Them(DiSaiKhu d);
     Task LuuAsync(CancellationToken ct);
 }
+
+public record DemDiSai(int ChuXeId, int SoLan, int SoLanKhuDay, DateTime LanCuoi);
 
 /// <summary>Tham số cau_hinh của TimXe (V004).</summary>
 public interface ICauHinhTimXe

@@ -14,11 +14,11 @@ public static class LoaiThongBao
     /// <summary>Khớp CHECK CK_tb_loai trong nha-xe.sql.</summary>
     public static readonly IReadOnlyCollection<string> HopLe =
         new[] { "VAO", "RA", "SAP_HET_HAN", "HET_HAN", "QUA_HAN", "NGHI_MAT", "HUY_GOI", "XE_BI_GO", "KHACH_HUY",
-                "KHU", "NHOM", "DOI_SOAT", "CHO_THANH_TOAN" };
+                "KHU", "NHOM", "DOI_SOAT", "CHO_THANH_TOAN", "XE_CHO_DUYET", "KET_QUA_DUYET" };
 
     /// <summary>Những loại Admin thấy trong hộp thư Admin: khách huỷ gói, xe nghi mất, xe ra không đủ xác nhận.
     /// Thêm loại mới chỉ cần thêm vào đây (OCP).</summary>
-    public static readonly IReadOnlyCollection<string> HopThuAdmin = new[] { KhachHuy, "NGHI_MAT", "RA", "DOI_SOAT" };
+    public static readonly IReadOnlyCollection<string> HopThuAdmin = new[] { KhachHuy, "NGHI_MAT", "RA", "DOI_SOAT", "XE_CHO_DUYET" };
 
     /// <summary>Kiểm tra trước khi lưu; nội dung dài quá thì cắt (như LEFT(..., 500) trong SQL cũ).</summary>
     public static string ChuanHoaNoiDung(string loai, string noiDung)

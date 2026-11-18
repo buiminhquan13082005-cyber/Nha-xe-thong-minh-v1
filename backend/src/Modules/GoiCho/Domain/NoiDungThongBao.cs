@@ -35,6 +35,19 @@ public static class NoiDungThongBao
     public static string NhacQuaHan(string bienSo, int soNgay, decimal soTien) =>
         $"Xe {bienSo} đã quá hạn {soNgay} ngày, phí quá hạn hiện tại {soTien:N0} đ. Trả phí trên ứng dụng trước khi lấy xe.";
 
+    /// <summary>"xe máy" / "ô tô" từ mã loại xe (bảng loai_xe).</summary>
+    public static string TenLoai(string? maLoai) => maLoai switch { "XE_MAY" => "xe máy", "O_TO" => "ô tô", _ => maLoai ?? "xe" };
+
+    /// <summary>Báo Admin: xe vừa có ảnh giấy đăng ký (lần đầu) hoặc chủ xe gửi lại sau khi bị từ chối.</summary>
+    public static string XeChoDuyet(string bienSo, string tenLoai, string hoTen, bool guiLai) => guiLai
+        ? $"Xe {bienSo} ({tenLoai}) của {hoTen} đã gửi lại ảnh giấy đăng ký sau khi bị từ chối, đang chờ duyệt lại."
+        : $"Có xe mới chờ duyệt: {bienSo} ({tenLoai}) của {hoTen}.";
+
+    public static string XeDaDuyet(string bienSo) => $"Xe {bienSo} đã được duyệt, bạn có thể mua gói.";
+
+    public static string XeBiTuChoi(string bienSo, string lyDo) =>
+        $"Xe {bienSo} bị từ chối: {lyDo}. Bạn có thể tải lại ảnh giấy đăng ký để gửi duyệt lại.";
+
     public static string AdminDaHuy(string tenGoi, string bienSo, string lyDo, decimal soTienHoan) =>
         $"Gói {tenGoi} của xe {bienSo} bị Admin huỷ. Lý do: {lyDo}"
         + (soTienHoan > 0 ? $". Hoàn {Tien(soTienHoan)} đ." : ". Không hoàn tiền.");

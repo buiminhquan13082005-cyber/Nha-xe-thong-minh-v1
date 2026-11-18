@@ -1,34 +1,39 @@
+import { useState } from 'react';
 import { DangTai, ThongBao } from '@/shared/ui/ui';
 import { useTaiDuLieu } from '@/shared/ui/useTaiDuLieu';
 import { useApp } from '@/app/AppContext';
-import anhSoDo from '@/assets/so-do-bai.png';
+import { BanDoBai } from '../components/BanDoBai';
 import { MucChoKhu } from '../components/MucChoKhu';
-import type { KhuCho } from '../models';
+import { TheKhu } from '../components/TheKhu';
+import type { DuongDiBanDo } from '../models';
 import { TEN_MUC } from '../models';
+import { khuXeMayTrenSoDo } from '../soDoXeMay';
 
 /**
- * Vị trí chữ khu trên ảnh "Phương án bố trí bãi đỗ xe" (tỉ lệ % theo chiều rộng / cao ảnh).
- * Ảnh chỉ là sơ đồ ý tưởng để xem khu nào còn chỗ; số liệu lấy từ camera khu (hướng vào +1, hướng ra −1).
+ * Sơ đồ chỗ trống (Admin và người dùng cùng xem). Hiện chỉ làm XE MÁY: 3 chấm R, S, Hầm B1/B2.
+ * Chấm khu ô tô A–Q được ẩn trên giao diện, dữ liệu trong DB vẫn giữ.
+ * Số trên chấm là chỗ còn trống (đã trừ suất đang giữ cho xe vừa qua cổng). Tự cập nhật mỗi 10 giây.
+ * Người dùng: chạm chấm khu → thẻ khu → "Xem đường đi" từ Cổng vào X (chỉ để xem: không tạo phiên, không giữ suất).
+ * Admin: chạm chấm chỉ xem thông tin khu, không có nút chỉ đường.
  */
-const VI_TRI: Record<string, { x: number; y: number }> = {
-  A: { x: 9.1, y: 24 }, B: { x: 16.1, y: 24 },
-  C: { x: 10.2, y: 42.7 }, D: { x: 15.1, y: 42.7 }, E: { x: 18.3, y: 49.7 },
-  F: { x: 30, y: 39.5 }, G: { x: 50.8, y: 39.5 }, H: { x: 66, y: 39.5 }, I: { x: 75.3, y: 40.9 },
-  J: { x: 30.7, y: 49.1 }, K: { x: 46.3, y: 49.1 },
-  L: { x: 26.1, y: 63.7 }, M: { x: 37.5, y: 63.7 }, N: { x: 46.9, y: 63.7 },
-  O: { x: 72.3, y: 50.9 }, P: { x: 63.8, y: 73.1 }, Q: { x: 72.2, y: 73.1 },
-  R: { x: 48.3, y: 26.9 }, S: { x: 82, y: 26.9 },
-};
-
-/** "Khu C" / "C" → "C". Khu đặt tên khác thì không có điểm trên ảnh (vẫn hiện trong danh sách bên dưới). */
-const chuKhu = (ten: string) => /^(?:khu\s+)?([a-z])$/i.exec(ten.trim())?.[1].toUpperCase() ?? null;
-
-/** Sơ đồ chỗ trống: Admin và người dùng cùng xem. Tự cập nhật mỗi 10 giây. */
 export function SoDoChoTrongPage() {
-  const { services } = useApp();
+  const { services, phien } = useApp();
+  const laAdmin = phien?.vaiTro === 'ADMIN';
   const ds = useTaiDuLieu(() => services.timXe.laySoXeKhu(), [], 10_000);
-  const theoChu = new Map<string, KhuCho>();
-  ds.duLieu?.khu.forEach((k) => { const c = chuKhu(k.ten); if (c) theoChu.set(c, k); });
+  const khuXeMay = khuXeMayTrenSoDo(ds.duLieu?.khu);
+  const tongCon = khuXeMay.reduce((s, k) => s + k.conLai, 0);
+  const tongSucChua = khuXeMay.reduce((s, k) => s + k.sucChua, 0);
+
+  const [chonId, setChonId] = useState<number | null>(null);
+  const [duong, setDuong] = useState<DuongDiBanDo | null>(null);
+  const [loiDuong, setLoiDuong] = useState<string | null>(null);
+  const chon = khuXeMay.find((k) => k.id === chonId) ?? null;
+
+  async function xemDuong(khuId: number) {
+    setLoiDuong(null);
+    try { setDuong(await services.dieuHuong.layDuongDi(khuId)); }
+    catch (e) { setLoiDuong((e as Error).message); }
+  }
 
   return (
     <>
@@ -36,29 +41,47 @@ export function SoDoChoTrongPage() {
         <h1>Sơ đồ chỗ trống</h1>
         <button className="nut nut-phu nut-nho" onClick={() => ds.taiLai()} disabled={ds.dangTai}>Tải lại</button>
       </div>
-      <p className="mo">Số trên mỗi khu là số chỗ còn trống. Camera khu nhận diện xe đi vào / đi ra nên số liệu tự cập nhật.</p>
+
+      <div className="the tong-cho-xe-may" aria-live="polite">
+        <span className="tong-cho-so">{ds.duLieu ? tongCon.toLocaleString('vi-VN') : '–'}</span>
+        <div>
+          <div className="tong-cho-nhan">chỗ xe máy còn trống</div>
+          <div className="mo">
+            {khuXeMay.length > 0
+              ? `trên ${tongSucChua.toLocaleString('vi-VN')} chỗ ở ${khuXeMay.length} khu · cập nhật ${gio(ds.duLieu?.bayGio)}`
+              : ds.duLieu ? 'Chưa có số liệu khu xe máy' : 'Đang tải…'}
+          </div>
+        </div>
+      </div>
+
       <div className="chu-thich-so-do">
-        <span><i className="cham muc-CON_NHIEU" /> {TEN_MUC.CON_NHIEU}</span>
-        <span><i className="cham muc-SAP_DAY" /> {TEN_MUC.SAP_DAY}</span>
+        <span><i className="cham muc-CON_NHIEU" /> {TEN_MUC.CON_NHIEU} (trên 20%)</span>
+        <span><i className="cham muc-SAP_DAY" /> {TEN_MUC.SAP_DAY} (20% trở xuống)</span>
         <span><i className="cham muc-DAY" /> {TEN_MUC.DAY}</span>
         <span><i className="cham muc-CHUA" /> Chưa có số liệu</span>
       </div>
       {ds.loi && <ThongBao loai="loi">{ds.loi}</ThongBao>}
-      <div className="so-do-anh">
-        <img src={anhSoDo} alt="Sơ đồ bố trí bãi đỗ xe" />
-        {Object.entries(VI_TRI).map(([chu, p]) => {
-          const k = theoChu.get(chu);
-          return (
-            <div key={chu} className={`diem-khu muc-${k ? k.muc : 'CHUA'}`} style={{ left: `${p.x}%`, top: `${p.y}%` }}
-                 title={k ? `${k.ten}: ${k.soXe} xe đang đỗ, còn ${k.conLai}/${k.sucChua} chỗ (${TEN_MUC[k.muc]})` : `Khu ${chu}: chưa có số liệu`}>
-              <b>{chu}</b>{k && <span>{k.conLai}</span>}
-            </div>
-          );
-        })}
+
+      <div className="so-do-khung">
+        <BanDoBai khu={ds.duLieu?.khu} duong={duong} khuDichId={duong?.denKhuId} khuChonId={chonId} hienViTri={!!duong}
+                  onChamKhu={(k) => setChonId((c) => (c === k.id ? null : k.id))} />
+        {chon
+          ? <TheKhu khu={chon} cheDo={laAdmin ? 'admin' : 'xem'} dangHienDuong={duong?.denKhuId === chon.id}
+                    onXemDuong={() => void xemDuong(chon.id)} onAnDuong={() => setDuong(null)} onDong={() => setChonId(null)} />
+          : <p className="mo">{laAdmin ? 'Chạm vào chấm khu để xem số liệu.' : 'Chạm vào chấm R, S hoặc Hầm để xem chỗ trống và đường đi từ Cổng vào X.'}</p>}
+        {loiDuong && <ThongBao loai="loi">{loiDuong}</ThongBao>}
+        {duong && !chon && (
+          <button className="nut nut-phu nut-nho" onClick={() => setDuong(null)}>Ẩn đường</button>
+        )}
       </div>
-      <h2>Chi tiết từng khu</h2>
+
+      <h2>Chi tiết khu xe máy</h2>
       {ds.dangTai && !ds.duLieu && <DangTai />}
-      {ds.duLieu && <MucChoKhu khu={ds.duLieu.khu} chiTiet />}
+      {ds.duLieu && <MucChoKhu khu={khuXeMay} chiTiet />}
     </>
   );
+}
+
+function gio(iso?: string) {
+  return iso ? new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
 }

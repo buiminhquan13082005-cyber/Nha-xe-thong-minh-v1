@@ -19,7 +19,9 @@ public interface IBaiXeModule
     Task<DuongDiDto?> TimDuongAsync(int khuId, CancellationToken ct = default);
 }
 
-public record KhuThongTin(int Id, string Ten, int LoaiXeId, int SucChua, double? KhoangCachTuCong);
+/// <param name="MaSoDo">Mã chấm trên ảnh sơ đồ (R, S, HAM). null: khu không có chấm.</param>
+/// <param name="DangDung">false: khu tạm tắt, không chọn khi chỉ dẫn và không hiện cho người dùng.</param>
+public record KhuThongTin(int Id, string Ten, int LoaiXeId, int SucChua, double? KhoangCachTuCong, string? MaSoDo = null, bool DangDung = true);
 public record CameraThongTin(int Id, int KhuId, string Ten, string VaiTro, bool DangBat);
 public record DiemDuong(int NutId, string Ten, double X, double Y);
 public record DuongDiDto(int KhuId, double TongMet, IReadOnlyList<DiemDuong> Diem);

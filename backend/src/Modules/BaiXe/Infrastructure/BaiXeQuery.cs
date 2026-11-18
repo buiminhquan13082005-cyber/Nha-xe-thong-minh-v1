@@ -15,6 +15,7 @@ public class BaiXeQuery : IBaiXeQuery
     public async Task<IReadOnlyList<KhuRow>> LayKhuAsync(CancellationToken ct) =>
         await _db.Database.SqlQuery<KhuRow>($"""
             SELECT k.id AS Id, k.ten AS Ten, k.loai_xe_id AS LoaiXeId FROM dbo.khu_vuc k
+            WHERE k.dang_dung = 1   -- Sơ đồ bãi chỉ hiện khu đang dùng (khu tạm tắt như Khu A, B ô tô bị ẩn, dữ liệu vẫn giữ)
             """).ToListAsync(ct);
 
     public async Task<IReadOnlyList<ODoRow>> LayODoAsync(CancellationToken ct) =>

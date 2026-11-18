@@ -6,7 +6,6 @@ import { AdminTaiKhoanPage, BaoVe, DangNhapPage, DangKyPage, QuenMatKhauPage, Do
 import { AdminCameraKhuPage, SoDoChoTrongPage, TimXePage } from '@/modules/tim-xe';
 import { AdminBaoCaoPage } from '@/modules/bao-cao';
 import { NhomGiaDinhPage } from '@/modules/nhom-gia-dinh';
-import { AiBienSoPage } from '@/modules/ai-bien-so';
 import { AdminThongBaoPage, ThongBaoPage } from '@/modules/thong-bao';
 import { Layout } from './Layout';
 
@@ -56,8 +55,6 @@ export function App() {
           <Route path="/admin/bao-cao" element={<AdminBaoCaoPage />} />
           {/* 1. TaiKhoan (Admin) */}
           <Route path="/admin/tai-khoan" element={<AdminTaiKhoanPage />} />
-          {/* 4. AiBienSo */}
-          <Route path="/admin/ai-bien-so" element={<AiBienSoPage />} />
           {/* 2. GoiCho (Admin) */}
           <Route path="/admin/duyet-xe" element={<AdminDuyetXePage />} />
           <Route path="/admin/goi-gia" element={<AdminGoiGiaPage />} />

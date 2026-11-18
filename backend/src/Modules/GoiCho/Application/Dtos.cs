@@ -76,6 +76,10 @@ public class XeQuanLyDto
     public string TenChuXe { get; set; } = "";
     public DateTime? HetHanLuc { get; set; }
     public bool DangTrongBai { get; set; }
+    /// <summary>Tên gói đang có hiệu lực lúc này; null: chưa mua / đã hết.</summary>
+    public string? TenGoiHienTai { get; set; }
+    /// <summary>CON_HAN (còn trên 72 giờ), SAP_HET (còn tối đa 72 giờ), CHUA_CO (hết hạn hoặc chưa từng mua).</summary>
+    public string TrangThaiGoi { get; set; } = "CHUA_CO";
 }
 
 /// <summary>Một dòng hàng chờ duyệt. Đã sắp: loại xe còn chỗ trước, rồi xe gửi lâu nhất trước.</summary>

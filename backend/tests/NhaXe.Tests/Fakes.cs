@@ -54,6 +54,7 @@ public class FakeGoiChoRepository : IGoiChoRepository
     public Task<GoiChoEntity?> TimAsync(int goiId, CancellationToken ct) => Task.FromResult(Ds.FirstOrDefault(g => g.Id == goiId));
     public Task<IReadOnlyList<GoiChoEntity>> LayDangBanAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<GoiChoEntity>>(Ds.Where(g => g.DangBan).ToList());
     public Task<bool> TonTaiLoaiXeAsync(int loaiXeId, CancellationToken ct) => Task.FromResult(loaiXeId is 1 or 2);
+    public Task<string?> LayMaLoaiXeAsync(int loaiXeId, CancellationToken ct) => Task.FromResult(loaiXeId switch { 1 => "O_TO", 2 => "XE_MAY", _ => (string?)null });
     public Task<IReadOnlyList<GoiChoEntity>> LayTatCaAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<GoiChoEntity>>(Ds);
     public Task<GoiChoEntity?> TimDeSuaAsync(int goiId, CancellationToken ct) => TimAsync(goiId, ct);
     public int SoLanLuu { get; private set; }
@@ -120,7 +121,7 @@ public class FakeTaiKhoanModule : ITaiKhoanModule
 {
     public List<int> AdminIds { get; } = new() { 1 };
     public Task<IReadOnlyDictionary<int, ThongTinLienHe>> LayLienHeAsync(IEnumerable<int> ids, CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyDictionary<int, ThongTinLienHe>>(ids.Distinct().ToDictionary(i => i, i => new ThongTinLienHe(i, "TK" + i, "090000000" + i)));
+        Task.FromResult<IReadOnlyDictionary<int, ThongTinLienHe>>(ids.Distinct().ToDictionary(i => i, i => new ThongTinLienHe(i, "TK" + i, "090000000" + i, $"tk{i}@vi-du.vn", new DateTime(2026, 1, 1))));
     public Task<IReadOnlyList<int>> LayAdminIdsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<int>>(AdminIds);
     public Task<IReadOnlyDictionary<int, string>> LayHoTenAsync(IEnumerable<int> ids, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyDictionary<int, string>>(ids.Distinct().ToDictionary(i => i, i => "TK" + i));

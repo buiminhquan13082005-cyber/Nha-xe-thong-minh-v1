@@ -23,6 +23,9 @@ public class Xe
     public DateTime TaoLuc { get; private set; }
     public string? LyDoGo { get; private set; }
     public string? LyDoTuChoi { get; private set; }
+    /// <summary>Lúc Admin duyệt và Admin nào duyệt (V011). Xe duyệt trước khi có cột thì null.</summary>
+    public DateTime? DuyetLuc { get; private set; }
+    public int? DuyetBoiId { get; private set; }
 
     private Xe() { } // cho EF Core
 
@@ -50,10 +53,12 @@ public class Xe
 
     /// <summary>Dựng lại xe đã có (dùng cho test và nạp dữ liệu).</summary>
     public static Xe DungLai(int id, int chuXeId, int loaiXeId, string bienSo, string trangThaiDuyet,
-                             string? anhGiayDangKy = null, string? lyDoTuChoi = null, bool chiaSeNhom = false) => new()
+                             string? anhGiayDangKy = null, string? lyDoTuChoi = null, bool chiaSeNhom = false,
+                             DateTime? duyetLuc = null, int? duyetBoiId = null, DateTime? taoLuc = null) => new()
     {
         Id = id, ChuXeId = chuXeId, LoaiXeId = loaiXeId, BienSo = bienSo, TrangThaiDuyet = trangThaiDuyet,
-        AnhGiayDangKy = anhGiayDangKy, ChiaSeNhom = chiaSeNhom,
+        AnhGiayDangKy = anhGiayDangKy, ChiaSeNhom = chiaSeNhom, DuyetLuc = duyetLuc, DuyetBoiId = duyetBoiId,
+        TaoLuc = taoLuc ?? default,
         LyDoTuChoi = trangThaiDuyet == Domain.TrangThaiDuyet.TuChoi ? (lyDoTuChoi ?? "Không rõ") : null
     };
 
@@ -71,6 +76,9 @@ public class Xe
             throw new LoiNghiepVu(LoaiLoi.KhongCoQuyen, "KHONG_PHAI_CHU_XE", "Chỉ chủ xe được mua gói cho xe này.");
         if (TrangThaiDuyet == Domain.TrangThaiDuyet.BiGo)
             throw new LoiNghiepVu(LoaiLoi.XungDot, "XE_BI_GO", $"Xe đã bị Admin gỡ. Lý do: {LyDoGo}");
+        if (TrangThaiDuyet == Domain.TrangThaiDuyet.TuChoi)
+            throw new LoiNghiepVu(LoaiLoi.XungDot, "XE_BI_TU_CHOI",
+                $"Xe bị từ chối duyệt nên chưa mua gói được. Lý do: {LyDoTuChoi}. Hãy tải lại ảnh giấy đăng ký để gửi duyệt lại.");
         if (TrangThaiDuyet != Domain.TrangThaiDuyet.DaDuyet)
             throw new LoiNghiepVu(LoaiLoi.XungDot, "XE_CHUA_DUYET", "Xe chưa được Admin duyệt nên chưa mua gói được.");
     }
@@ -84,22 +92,25 @@ public class Xe
             throw new LoiNghiepVu(LoaiLoi.DuLieuKhongHopLe, "THIEU_LY_DO", "Lý do gỡ xe phải có ít nhất 5 ký tự.");
     }
 
-    /// <summary>Duyệt: Admin phải có ảnh giấy đăng ký để đối chiếu với biển số khách nhập.</summary>
-    public void Duyet()
+    /// <summary>Duyệt: Admin phải có ảnh giấy đăng ký để đối chiếu với biển số khách nhập. Ghi lại ai duyệt, lúc nào.</summary>
+    public void Duyet(int adminId, DateTime luc)
     {
         KiemTraDangChoDuyet();
         if (string.IsNullOrEmpty(AnhGiayDangKy))
             throw new LoiNghiepVu(LoaiLoi.XungDot, "THIEU_ANH_GIAY_DK",
                 $"Xe {BienSo} chưa có ảnh giấy đăng ký nên chưa duyệt được.");
         TrangThaiDuyet = Domain.TrangThaiDuyet.DaDuyet;
+        DuyetLuc = luc;
+        DuyetBoiId = adminId;
     }
 
     /// <summary>Từ chối: bắt buộc có lý do (chủ xe đọc được để sửa và gửi lại).</summary>
     public void TuChoi(string? lyDo)
     {
         KiemTraDangChoDuyet();
+        var ld = ChuanHoaLyDoTuChoi(lyDo); // kiểm tra TRƯỚC khi đổi trạng thái: lý do sai thì xe giữ nguyên "chờ duyệt"
         TrangThaiDuyet = Domain.TrangThaiDuyet.TuChoi;
-        LyDoTuChoi = ChuanHoaLyDoTuChoi(lyDo);
+        LyDoTuChoi = ld;
     }
 
     public static string ChuanHoaLyDoTuChoi(string? lyDo)
@@ -144,6 +155,12 @@ public class Xe
         if (string.IsNullOrEmpty(AnhGiayDangKy))
             throw new LoiNghiepVu(LoaiLoi.KhongTimThay, "CHUA_CO_ANH", "Xe chưa có ảnh giấy đăng ký.");
     }
+
+    /// <summary>
+    /// Sau khi gán ảnh, có cần báo Admin "có xe chờ duyệt" không: xe vừa có ảnh lần đầu (Admin cần ảnh mới duyệt được),
+    /// hoặc chủ xe gửi lại sau khi bị từ chối. Thay ảnh khi xe vẫn đang chờ duyệt thì không báo lần nữa.
+    /// </summary>
+    public static bool CanBaoAdmin(bool guiLai, bool coAnhLanDau) => guiLai || coAnhLanDau;
 
     private void KiemTraDangChoDuyet()
     {

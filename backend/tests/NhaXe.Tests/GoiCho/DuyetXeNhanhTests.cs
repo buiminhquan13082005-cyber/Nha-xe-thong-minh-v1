@@ -26,7 +26,7 @@ public class AnhGiayDangKyTests
     private static (TaiAnhGiayDangKyUseCase uc, FakeXeRepository repo, FakeLuuTruTep kho) Tao()
     {
         var repo = new FakeXeRepository(); var kho = new FakeLuuTruTep();
-        return (new TaiAnhGiayDangKyUseCase(repo, kho, new FakeCauHinh()), repo, kho);
+        return (new TaiAnhGiayDangKyUseCase(repo, kho, new FakeCauHinh(), new FakeGoiChoRepository(), new FakeTaiKhoanModule(), new FakeThongBaoModule()), repo, kho);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class DuyetHangLoatTests
     [Fact]
     public void DuyetXeChuaCoAnh_BiChan() =>
         Assert.Equal("THIEU_ANH_GIAY_DK",
-            Assert.Throws<LoiNghiepVu>(() => Xe.DungLai(9, 4, 2, "59D145678", TrangThaiDuyet.ChoDuyet).Duyet()).Ma);
+            Assert.Throws<LoiNghiepVu>(() => Xe.DungLai(9, 4, 2, "59D145678", TrangThaiDuyet.ChoDuyet).Duyet(1, new DateTime(2026, 11, 18, 8, 0, 0))).Ma);
 
     [Fact]
     public void TuChoiKhongLyDo_BiChan() =>
@@ -101,7 +101,7 @@ public class DuyetHangLoatTests
         repo.Ds.Add(Xe.DungLai(3, 5, 2, "59D100003", TrangThaiDuyet.DaDuyet, "giay-dk/3.png"));  // đã xử lý
         repo.Ds.Add(Xe.DungLai(4, 5, 2, "59D100004", TrangThaiDuyet.ChoDuyet, "giay-dk/4.png"));
 
-        var kq = await new DuyetHangLoatUseCase(repo).ThucHienAsync(new DuyetHangLoatLenh(new[] { 1, 2, 3, 4, 99, 1 }, true, null));
+        var kq = await new DuyetHangLoatUseCase(repo, new FakeClock(), new FakeThongBaoModule()).ThucHienAsync(1, new DuyetHangLoatLenh(new[] { 1, 2, 3, 4, 99, 1 }, true, null));
 
         Assert.Equal(new[] { 1, 4 }, kq.ThanhCong);
         Assert.Equal(new[] { "THIEU_ANH_GIAY_DK", "DA_XU_LY", "KHONG_TIM_THAY_XE" }, kq.Loi.Select(l => l.Ma));
@@ -114,7 +114,7 @@ public class DuyetHangLoatTests
         var repo = new FakeXeRepository();
         repo.Ds.Add(Xe.DungLai(1, 4, 2, "59D100001", TrangThaiDuyet.ChoDuyet, "giay-dk/1.png"));
         repo.Ds.Add(Xe.DungLai(2, 5, 2, "59D100002", TrangThaiDuyet.ChoDuyet));
-        var kq = await new DuyetHangLoatUseCase(repo).ThucHienAsync(new DuyetHangLoatLenh(new[] { 1, 2 }, false, "Ảnh không khớp biển số"));
+        var kq = await new DuyetHangLoatUseCase(repo, new FakeClock(), new FakeThongBaoModule()).ThucHienAsync(1, new DuyetHangLoatLenh(new[] { 1, 2 }, false, "Ảnh không khớp biển số"));
         Assert.Equal(2, kq.ThanhCong.Count);
         Assert.All(repo.Ds, x => Assert.Equal("Ảnh không khớp biển số", x.LyDoTuChoi));
     }
@@ -124,7 +124,7 @@ public class DuyetHangLoatTests
     {
         var repo = new FakeXeRepository();
         repo.Ds.Add(Xe.DungLai(1, 4, 2, "59D100001", TrangThaiDuyet.ChoDuyet, "giay-dk/1.png"));
-        await Assert.ThrowsAsync<LoiNghiepVu>(() => new DuyetHangLoatUseCase(repo).ThucHienAsync(new DuyetHangLoatLenh(new[] { 1 }, false, "")));
+        await Assert.ThrowsAsync<LoiNghiepVu>(() => new DuyetHangLoatUseCase(repo, new FakeClock(), new FakeThongBaoModule()).ThucHienAsync(1, new DuyetHangLoatLenh(new[] { 1 }, false, "")));
         Assert.Equal(TrangThaiDuyet.ChoDuyet, repo.Ds[0].TrangThaiDuyet);
     }
 }

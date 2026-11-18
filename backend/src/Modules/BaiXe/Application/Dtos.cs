@@ -60,13 +60,14 @@ public record SoDoBaiDto(DateTime CapNhatLuc, IReadOnlyList<SucChuaBaiDto> SucCh
 // ---------- Quản lý bãi (Admin) và chỗ trống (khách) ----------
 
 public record LoaiXeDto(int Id, string Ten);
-public record KhuQuanLyDto(int Id, string Ten, int LoaiXeId, int SoO, int SoCamera, int SucChua = 0);
+public record KhuQuanLyDto(int Id, string Ten, int LoaiXeId, int SoO, int SoCamera, int SucChua = 0, string? MaSoDo = null, bool DangDung = true);
 public record OQuanLyDto(int Id, int KhuId, string MaO, string MaQr, int? CameraId, string TrangThai, string? Nguon, DateTime? CapNhatLuc);
 public record CameraDto(int Id, int KhuId, string Ten, string NguonAnh, bool DangBat, string VaiTro = "GIAM_SAT");
 public record CauHinhBaiDto(IReadOnlyList<LoaiXeDto> LoaiXe, IReadOnlyList<KhuQuanLyDto> Khu, IReadOnlyList<OQuanLyDto> O,
                             IReadOnlyList<CameraDto> Camera);
 
-public record KhuLenh(string? Ten, int LoaiXeId, int? SucChua = null);
+/// <param name="DangDung">null: giữ nguyên. false: tạm tắt khu (không chỉ dẫn xe vào, không hiện cho người dùng).</param>
+public record KhuLenh(string? Ten, int LoaiXeId, int? SucChua = null, bool? DangDung = null);
 public record OLenh(int KhuId, string? MaO, int? CameraId);
 public record CameraLenh(int KhuId, string? Ten, string? NguonAnh, bool DangBat, string? VaiTro = null);
 public record TrangThaiOLenh(string? TrangThai);

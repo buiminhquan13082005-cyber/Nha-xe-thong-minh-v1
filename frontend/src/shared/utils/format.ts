@@ -31,3 +31,9 @@ export function conLai(iso: string | null, bayGio = Date.now()): string {
   const chu = ngay > 0 ? `${ngay} ngày${gio % 24 ? ` ${gio % 24} giờ` : ''}` : gio > 0 ? `${gio} giờ` : 'dưới 1 giờ';
   return qua ? `Quá hạn ${chu}` : `Còn ${chu}`;
 }
+
+/**
+ * Chuẩn hoá chuỗi tìm biển số giống cách backend lưu (BienSo trong Domain): viết hoa, bỏ dấu chấm / gạch / khoảng trắng.
+ * "29a-1", "29A.12" → "29A1", "29A12". Dùng để tìm "chứa".
+ */
+export const chuanHoaBienSo = (s: string) => s.toUpperCase().replace(/[^0-9A-Z]/g, '');

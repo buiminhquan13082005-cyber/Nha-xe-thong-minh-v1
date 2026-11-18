@@ -25,4 +25,11 @@ public sealed record BienSo
     }
 
     public override string ToString() => GiaTri;
+
+    /// <summary>
+    /// Chuẩn hoá CHUỖI TÌM giống cách lưu biển số (viết hoa, bỏ chấm / gạch / khoảng trắng), nhưng không bắt đủ dạng biển:
+    /// "29a-1", "29A.12" → "29A1", "29A12" để tìm "chứa". Chỉ giữ A–Z và 0–9 nên an toàn khi đưa vào LIKE (không có % hay _).
+    /// </summary>
+    public static string ChuanHoaTim(string? nhap) =>
+        new string((nhap ?? "").ToUpperInvariant().Where(c => c is >= 'A' and <= 'Z' or >= '0' and <= '9').Take(15).ToArray());
 }

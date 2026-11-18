@@ -71,7 +71,8 @@ export interface SoDoBai {
 
 export interface LoaiXe { id: number; ten: LoaiXeMa }
 /** sucChua: số xe tối đa của khu (khu xe máy dùng để tính mức chỗ và chọn khu). */
-export interface KhuQuanLy { id: number; ten: string; loaiXeId: number; soO: number; soCamera: number; sucChua: number }
+/** maSoDo: mã chấm trên ảnh sơ đồ (R, S, HAM). dangDung = false: khu tạm tắt (không chỉ dẫn xe vào, người dùng không thấy). */
+export interface KhuQuanLy { id: number; ten: string; loaiXeId: number; soO: number; soCamera: number; sucChua: number; maSoDo: string | null; dangDung: boolean }
 export interface OQuanLy {
   id: number; khuId: number; maO: string; maQr: string; cameraId: number | null;
   trangThai: TrangThaiO; nguon: 'ADMIN' | 'AI' | null; capNhatLuc: string | null;
@@ -84,7 +85,7 @@ export type VaiTroCamera = 'KHU_VAO' | 'KHU_RA' | 'LOI_VAO_KHU' | 'GIAM_SAT';
 export interface CameraBai { id: number; khuId: number; ten: string; nguonAnh: string; dangBat: boolean; vaiTro: VaiTroCamera }
 export interface CauHinhBai { loaiXe: LoaiXe[]; khu: KhuQuanLy[]; o: OQuanLy[]; camera: CameraBai[] }
 
-export interface KhuLenh { ten: string; loaiXeId: number; sucChua?: number | null }
+export interface KhuLenh { ten: string; loaiXeId: number; sucChua?: number | null; dangDung?: boolean | null }
 export interface OLenh { khuId: number; maO: string; cameraId: number | null }
 export interface CameraLenh { khuId: number; ten: string; nguonAnh: string; dangBat: boolean; vaiTro?: VaiTroCamera }
 

@@ -1,5 +1,5 @@
 import type { IHttpClient } from '@/shared/api/httpClient';
-import type { ChiDan, KetQuaCameraKhu, SoXeKhu, TimXeCuaToi } from '../models';
+import type { ChiDan, DiSaiKhuAdmin, KetQuaCameraKhu, SoXeKhu, TimXeCuaToi } from '../models';
 
 /** Lời gọi API của module TimXe. Trang chỉ biết interface này. */
 export interface ITimXeService {
@@ -16,6 +16,8 @@ export interface ITimXeService {
   cameraKhuAnh(cameraId: number, anh: File, bienSo?: string, tuDong?: boolean): Promise<KetQuaCameraKhu>;
   /** khuId = null: gỡ xe khỏi khu. */
   ganKhu(luotGuiId: number, khuId: number | null): Promise<void>;
+  /** Cảnh báo đi sai khu gần đây và ai hay đi sai (trang Quản lý bãi). */
+  layDiSaiKhu(): Promise<DiSaiKhuAdmin>;
 }
 
 export class ApiTimXeService implements ITimXeService {
@@ -35,4 +37,5 @@ export class ApiTimXeService implements ITimXeService {
     return this.http.postForm<KetQuaCameraKhu>(`/api/admin/tim-xe/camera/${cameraId}/anh`, f);
   }
   ganKhu(luotGuiId: number, khuId: number | null) { return this.http.put<void>('/api/admin/tim-xe/gan-khu', { luotGuiId, khuId }); }
+  layDiSaiKhu() { return this.http.get<DiSaiKhuAdmin>('/api/admin/tim-xe/di-sai-khu'); }
 }

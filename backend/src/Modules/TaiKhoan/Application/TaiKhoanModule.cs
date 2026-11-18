@@ -13,7 +13,7 @@ public class TaiKhoanModule : ITaiKhoanModule
         => (await _repo.LayNhieuAsync(taiKhoanIds.Distinct(), ct)).ToDictionary(t => t.Id, t => t.HoTen);
 
     public async Task<IReadOnlyDictionary<int, ThongTinLienHe>> LayLienHeAsync(IEnumerable<int> taiKhoanIds, CancellationToken ct = default)
-        => (await _repo.LayNhieuAsync(taiKhoanIds.Distinct(), ct)).ToDictionary(t => t.Id, t => new ThongTinLienHe(t.Id, t.HoTen, t.Sdt));
+        => (await _repo.LayNhieuAsync(taiKhoanIds.Distinct(), ct)).ToDictionary(t => t.Id, t => new ThongTinLienHe(t.Id, t.HoTen, t.Sdt, t.Email, t.TaoLuc));
 
     public async Task<IReadOnlyList<int>> LayAdminIdsAsync(CancellationToken ct = default)
         => (await _repo.LayTheoVaiTroAsync(VaiTro.Admin, ct)).Select(t => t.Id).OrderBy(id => id).ToList();

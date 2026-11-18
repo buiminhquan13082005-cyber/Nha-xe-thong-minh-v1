@@ -43,6 +43,8 @@ public interface IGoiChoRepository
     Task<GoiChoEntity?> TimDeSuaAsync(int goiId, CancellationToken ct);
     Task LuuAsync(CancellationToken ct);
     Task<bool> TonTaiLoaiXeAsync(int loaiXeId, CancellationToken ct);
+    /// <summary>Mã loại xe (XE_MAY, O_TO). null: không có loại này.</summary>
+    Task<string?> LayMaLoaiXeAsync(int loaiXeId, CancellationToken ct);
 }
 
 public interface IXeQuery
@@ -53,7 +55,15 @@ public interface IXeQuery
     Task<IReadOnlyList<DangKyChoDto>> LayLichSuGoiAsync(int xeId, CancellationToken ct);
     Task<IReadOnlyList<ChoConBanDto>> LayChoConBanAsync(CancellationToken ct);
     Task<IReadOnlyList<TinhTrangXeRow>> LayTinhTrangXeAsync(IReadOnlyCollection<int> xeIds, CancellationToken ct);
+    /// <summary>
+    /// Xe đã duyệt, tìm "chứa" theo biển số ĐÃ chuẩn hoá (chỉ chữ hoa + số), lọc theo trạng thái gói, phân trang.
+    /// Trả tổng số xe khớp (trước khi phân trang) và các xe của trang. TenChuXe / DangTrongBai do use case ghép.
+    /// </summary>
+    Task<(int Tong, IReadOnlyList<XeQuanLyDto> Ds)> TimXeDaDuyetAsync(string bienSoChuan, string loc, int boQua, int lay, CancellationToken ct);
+    /// <summary>MỌI xe đã duyệt (gọn: id, biển, loại, chủ, hạn). Cổng ra vào dùng để khớp biển gần đúng.</summary>
     Task<IReadOnlyList<XeQuanLyDto>> LayXeDaDuyetAsync(CancellationToken ct);
+    /// <summary>Số xe đang chờ duyệt (badge menu Admin).</summary>
+    Task<int> DemChoDuyetAsync(CancellationToken ct);
     /// <summary>Tìm xe theo biển số đã chuẩn hoá (cổng ra vào hỏi). null = chưa đăng ký.</summary>
     Task<XeTaiCongRow?> TimXeTaiCongAsync(string bienSoChuan, CancellationToken ct);
 }

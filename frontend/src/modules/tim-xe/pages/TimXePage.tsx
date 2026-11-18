@@ -7,7 +7,7 @@ import { dinhDangNgay, hienThiBienSo } from '@/shared/utils/format';
 import type { KhuCho, XeTimXe } from '../models';
 import { TEN_NGUON } from '../models';
 import { MucChoKhu } from '../components/MucChoKhu';
-import { BanDoDuong } from '../components/BanDoDuong';
+import { BanDoBai } from '../components/BanDoBai';
 import { DemNguocGiuCho } from '../components/DemNguocGiuCho';
 
 /**
@@ -103,7 +103,10 @@ function TheTimXe({ x, bayGio, khu, khiXong }: { x: XeTimXe; bayGio: string; khu
         <p className="mo">Chưa có camera lối vào khu nào ghi nhận xe. Đỗ xong, bấm "Đã đỗ xe" và chọn khu.</p>
       )}
 
-      {x.duong && <BanDoDuong duong={x.duong} />}
+      {x.duong && (
+        <BanDoBai khu={khu} khuDichId={x.duong.khuId} hienViTri={!x.khuId}
+                  duong={x.khuId ? null : { denKhuId: x.duong.khuId, tongMet: x.duong.tongMet, diem: x.duong.diem }} />
+      )}
 
       {x.hoTroDinhVi && (
         moChon ? (

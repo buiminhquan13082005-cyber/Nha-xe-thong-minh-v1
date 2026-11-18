@@ -22,4 +22,5 @@ public interface ITaiKhoanModule
     Task<IReadOnlyDictionary<int, string>> LayMaDayAsync(IEnumerable<int> taiKhoanIds, CancellationToken ct = default);
 }
 
-public record ThongTinLienHe(int Id, string HoTen, string Sdt);
+/// <summary>Thông tin liên hệ để hiển thị cho Admin. KHÔNG có mật khẩu, mã khôi phục hay thông tin nhạy cảm khác.</summary>
+public record ThongTinLienHe(int Id, string HoTen, string Sdt, string? Email = null, DateTime? TaoLuc = null);

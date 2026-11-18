@@ -18,4 +18,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Đồ thị điểm mốc của bãi: sửa toạ độ trong file JSON rồi build lại -->
+    <EmbeddedResource Include="BanDo\do-thi-ban-do.json" />
+  </ItemGroup>
+
 </Project>

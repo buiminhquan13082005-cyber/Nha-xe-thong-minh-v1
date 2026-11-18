@@ -214,17 +214,33 @@ public class LayXeChoDuyetUseCase
     }
 }
 
+/// <summary>Admin duyệt / từ chối một xe. Ghi ai duyệt, lúc nào; lưu DB xong mới báo chủ xe.</summary>
 public class DuyetXeUseCase
 {
     private readonly IXeRepository _xe;
-    public DuyetXeUseCase(IXeRepository xe) => _xe = xe;
+    private readonly IClock _clock;
+    private readonly IThongBaoModule _thongBao;
+    public DuyetXeUseCase(IXeRepository xe, IClock clock, IThongBaoModule thongBao) { _xe = xe; _clock = clock; _thongBao = thongBao; }
 
-    public async Task ThucHienAsync(int xeId, bool dongY, string? lyDo = null, CancellationToken ct = default)
+    public async Task ThucHienAsync(int adminId, int xeId, bool dongY, string? lyDo = null, CancellationToken ct = default)
     {
         var xe = await _xe.TimAsync(xeId, ct)
                  ?? throw new LoiNghiepVu(LoaiLoi.KhongTimThay, "KHONG_TIM_THAY_XE", "Không tìm thấy xe.");
-        if (dongY) xe.Duyet(); else xe.TuChoi(lyDo);
+        if (dongY) xe.Duyet(adminId, _clock.BayGio); else xe.TuChoi(lyDo);
         await _xe.LuuAsync(ct);
+        await BaoKetQuaDuyet.GuiAsync(_thongBao, xe, ct);
+    }
+}
+
+/// <summary>Báo chủ xe kết quả duyệt. Gọi SAU khi lưu DB; gửi lỗi thì không làm hỏng việc duyệt đã lưu.</summary>
+internal static class BaoKetQuaDuyet
+{
+    public static async Task GuiAsync(IThongBaoModule thongBao, Xe xe, CancellationToken ct)
+    {
+        var noiDung = xe.TrangThaiDuyet == TrangThaiDuyet.DaDuyet
+            ? NoiDungThongBao.XeDaDuyet(xe.BienSo) : NoiDungThongBao.XeBiTuChoi(xe.BienSo, xe.LyDoTuChoi ?? "");
+        try { await thongBao.GuiAsync(xe.ChuXeId, LoaiThongBao.KetQuaDuyet, noiDung, ct); }
+        catch (Exception e) when (e is not OperationCanceledException) { /* đã duyệt xong; chủ xe vẫn thấy trạng thái trong "Xe của tôi" */ }
     }
 }
 
@@ -236,9 +252,11 @@ public class DuyetHangLoatUseCase
 {
     public const int ToiDaMotLan = 50;
     private readonly IXeRepository _xe;
-    public DuyetHangLoatUseCase(IXeRepository xe) => _xe = xe;
+    private readonly IClock _clock;
+    private readonly IThongBaoModule _thongBao;
+    public DuyetHangLoatUseCase(IXeRepository xe, IClock clock, IThongBaoModule thongBao) { _xe = xe; _clock = clock; _thongBao = thongBao; }
 
-    public async Task<KetQuaHangLoatDto> ThucHienAsync(DuyetHangLoatLenh lenh, CancellationToken ct = default)
+    public async Task<KetQuaHangLoatDto> ThucHienAsync(int adminId, DuyetHangLoatLenh lenh, CancellationToken ct = default)
     {
         var ids = (lenh.XeIds ?? Array.Empty<int>()).Distinct().ToList();
         if (ids.Count == 0)
@@ -248,19 +266,22 @@ public class DuyetHangLoatUseCase
         if (!lenh.DongY) Xe.ChuanHoaLyDoTuChoi(lenh.LyDo); // sai lý do thì dừng ngay, không xử lý xe nào
 
         var thanhCong = new List<int>();
+        var daXuLy = new List<Xe>();
         var loi = new List<LoiHangLoatDto>();
+        var bayGio = _clock.BayGio;
         foreach (var id in ids)
         {
             var xe = await _xe.TimAsync(id, ct);
             if (xe is null) { loi.Add(new(id, "KHONG_TIM_THAY_XE", "Không tìm thấy xe.")); continue; }
             try
             {
-                if (lenh.DongY) xe.Duyet(); else xe.TuChoi(lenh.LyDo);
-                thanhCong.Add(id);
+                if (lenh.DongY) xe.Duyet(adminId, bayGio); else xe.TuChoi(lenh.LyDo);
+                thanhCong.Add(id); daXuLy.Add(xe);
             }
             catch (LoiNghiepVu e) { loi.Add(new(id, e.Ma, e.Message)); }
         }
         if (thanhCong.Count > 0) await _xe.LuuAsync(ct);
+        foreach (var xe in daXuLy) await BaoKetQuaDuyet.GuiAsync(_thongBao, xe, ct); // sau khi lưu DB
         return new KetQuaHangLoatDto(thanhCong, loi);
     }
 }
@@ -271,7 +292,12 @@ public class TaiAnhGiayDangKyUseCase
     private readonly IXeRepository _xe;
     private readonly ILuuTruTep _luuTru;
     private readonly ICauHinh _cauHinh;
-    public TaiAnhGiayDangKyUseCase(IXeRepository xe, ILuuTruTep luuTru, ICauHinh cauHinh) { _xe = xe; _luuTru = luuTru; _cauHinh = cauHinh; }
+    private readonly IGoiChoRepository _goi;
+    private readonly ITaiKhoanModule _taiKhoan;
+    private readonly IThongBaoModule _thongBao;
+    public TaiAnhGiayDangKyUseCase(IXeRepository xe, ILuuTruTep luuTru, ICauHinh cauHinh, IGoiChoRepository goi,
+                                   ITaiKhoanModule taiKhoan, IThongBaoModule thongBao)
+    { _xe = xe; _luuTru = luuTru; _cauHinh = cauHinh; _goi = goi; _taiKhoan = taiKhoan; _thongBao = thongBao; }
 
     public async Task ThucHienAsync(int taiKhoanId, int xeId, Stream noiDung, long kichThuoc, CancellationToken ct = default)
     {
@@ -293,10 +319,21 @@ public class TaiAnhGiayDangKyUseCase
 
         // Kiểm tra quyền và trạng thái TRƯỚC khi ghi tệp (khoá tạm), rồi mới lưu tệp thật
         xe.KiemTraDoiAnhDuoc(taiKhoanId);
+        var coAnhLanDau = string.IsNullOrEmpty(xe.AnhGiayDangKy);
         buf.Position = 0;
         var khoa = await _luuTru.LuuAsync("giay-dk", tep.Duoi, buf, ct);
-        xe.GanAnhGiayDangKy(taiKhoanId, khoa);
+        var guiLai = xe.GanAnhGiayDangKy(taiKhoanId, khoa);
         await _xe.LuuAsync(ct);
+
+        // Admin cần ảnh mới duyệt được: báo khi xe vừa có ảnh lần đầu, hoặc gửi lại sau khi bị từ chối (không báo 2 lần)
+        if (!Xe.CanBaoAdmin(guiLai, coAnhLanDau)) return;
+        try
+        {
+            var ten = (await _taiKhoan.LayHoTenAsync(new[] { xe.ChuXeId }, ct)).GetValueOrDefault(xe.ChuXeId, "?");
+            var loai = NoiDungThongBao.TenLoai(await _goi.LayMaLoaiXeAsync(xe.LoaiXeId, ct));
+            await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.XeChoDuyet, NoiDungThongBao.XeChoDuyet(xe.BienSo, loai, ten, guiLai), ct);
+        }
+        catch (Exception e) when (e is not OperationCanceledException) { /* ảnh đã lưu; badge "Quản lý xe" vẫn đếm được xe này */ }
     }
 }
 
@@ -379,28 +416,6 @@ public class HuyGoiUseCase
         await _thongBao.GuiChoMoiAdminAsync(LoaiThongBao.KhachHuy,
             NoiDungThongBao.BaoAdminKhachHuy(khach?.HoTen ?? "?", khach?.Sdt ?? "?", goi.TenGoi, goi.BienSo, hoan.SoTien, ld, gy), ct);
         return new XemHuyGoiDto(goi.Id, goi.TenGoi, goi.ChuaBatDau(bayGio), hoan.SoNgayConLai, hoan.SoTien);
-    }
-}
-
-public class LayXeDaDuyetUseCase
-{
-    private readonly IXeQuery _query;
-    private readonly ITaiKhoanModule _taiKhoan;
-    private readonly TraCuuTrongBai _trongBai;
-    public LayXeDaDuyetUseCase(IXeQuery query, ITaiKhoanModule taiKhoan, TraCuuTrongBai trongBai)
-    { _query = query; _taiKhoan = taiKhoan; _trongBai = trongBai; }
-
-    public async Task<IReadOnlyList<XeQuanLyDto>> ThucHienAsync(CancellationToken ct = default)
-    {
-        var ds = await _query.LayXeDaDuyetAsync(ct);
-        var ten = await _taiKhoan.LayHoTenAsync(ds.Select(x => x.ChuXeId), ct);
-        var trongBai = await _trongBai.LayAsync(ds.Select(x => x.XeId), ct);
-        foreach (var x in ds)
-        {
-            x.TenChuXe = ten.GetValueOrDefault(x.ChuXeId, "?");
-            x.DangTrongBai = trongBai.ContainsKey(x.XeId);
-        }
-        return ds;
     }
 }
 

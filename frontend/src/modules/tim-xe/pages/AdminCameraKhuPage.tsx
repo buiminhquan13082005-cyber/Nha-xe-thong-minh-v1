@@ -14,15 +14,16 @@ const SO_DONG_VUA_QUET = 8;
 
 type Huong = 'vao' | 'ra';
 /** vao: đã ghi xe vào khu · ra: đã ghi xe ra khỏi khu · bo: đọc lặp / không cần ghi · la: biển không thuộc xe nào trong bãi · nghi: AI chưa chắc. */
-type Loai = 'vao' | 'ra' | 'bo' | 'la' | 'nghi';
+type Loai = 'vao' | 'ra' | 'bo' | 'la' | 'nghi' | 'day';
 interface DongQuet { luc: Date; bienSo: string; loai: Loai; nhan: string }
 
-const NHAN: Record<Loai, string> = { vao: 'Vào khu +1', ra: 'Ra khu −1', bo: 'Bỏ qua', la: 'Không khớp', nghi: 'Chờ chọn biển' };
-const LOP: Record<Loai, string> = { vao: 'ok', ra: 'ra', bo: 'cho', la: 'loi', nghi: 'nghi' };
+const NHAN: Record<Loai, string> = { vao: 'Vào khu +1', ra: 'Ra khu −1', bo: 'Bỏ qua', la: 'Không khớp', nghi: 'Chờ chọn biển', day: 'Khu đầy, không +1' };
+const LOP: Record<Loai, string> = { vao: 'ok', ra: 'ra', bo: 'cho', la: 'loi', nghi: 'nghi', day: 'loi' };
 
 function phanLoai(kq: KetQuaCameraKhu): Loai {
   if (kq.ketQua === 'DA_GHI') return kq.huong === 'RA' ? 'ra' : 'vao';
   if (kq.ketQua === 'BO_QUA') return 'bo';
+  if (kq.ketQua === 'KHU_DAY') return 'day';
   return (kq.ungVien?.length ?? 0) > 0 && !kq.bienSo ? 'nghi' : 'la';
 }
 
@@ -62,7 +63,8 @@ export function AdminCameraKhuPage() {
 
   // Khu có camera khu (hướng vào / hướng ra / kiểu cũ hai hướng)
   const cameraKhu = useMemo(() => ch.duLieu?.camera.filter((c) => c.vaiTro === 'KHU_VAO' || c.vaiTro === 'KHU_RA' || c.vaiTro === 'LOI_VAO_KHU') ?? [], [ch.duLieu]);
-  const dsKhu = useMemo(() => (ch.duLieu?.khu ?? []).filter((k) => cameraKhu.some((c) => c.khuId === k.id)), [ch.duLieu, cameraKhu]);
+  // Chỉ khu đang dùng (khu tạm tắt như Khu A, B ô tô không hiện; bật lại ở Quản lý bãi)
+  const dsKhu = useMemo(() => (ch.duLieu?.khu ?? []).filter((k) => k.dangDung && cameraKhu.some((c) => c.khuId === k.id)), [ch.duLieu, cameraKhu]);
   useEffect(() => { if (!khuId && dsKhu.length) setKhuId(dsKhu[0].id); }, [khuId, dsKhu]);
   const cam = cameraKhu.find((c) => c.khuId === khuId && c.vaiTro === (huong === 'vao' ? 'KHU_VAO' : 'KHU_RA'))
     ?? cameraKhu.find((c) => c.khuId === khuId && c.vaiTro === 'LOI_VAO_KHU');
@@ -238,6 +240,7 @@ export function AdminCameraKhuPage() {
 const TIEU_DE: Record<Loai, { icon: string; tt: string }> = {
   vao: { icon: '✓', tt: 'Đã ghi xe vào khu' }, ra: { icon: '✓', tt: 'Đã ghi xe ra khỏi khu' },
   bo: { icon: '…', tt: 'Bỏ qua' }, la: { icon: '!', tt: 'Không khớp xe trong bãi' }, nghi: { icon: '?', tt: 'AI chưa chắc · chọn biển' },
+  day: { icon: '■', tt: 'Khu đã đầy · không cho vào, không +1' },
 };
 
 function KhungKetQua({ kq, loai, chon, boQua }: { kq: KetQuaCameraKhu; loai: Loai; chon: (b: string) => void; boQua: () => void }) {

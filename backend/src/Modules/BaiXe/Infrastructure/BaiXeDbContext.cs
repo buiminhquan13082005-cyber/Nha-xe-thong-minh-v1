@@ -28,6 +28,8 @@ public class BaiXeDbContext : DbContext
             e.Property(x => x.Ten).HasColumnName("ten").HasMaxLength(50);
             e.Property(x => x.LoaiXeId).HasColumnName("loai_xe_id");
             e.Property(x => x.SucChua).HasColumnName("suc_chua");
+            e.Property(x => x.MaSoDo).HasColumnName("ma_so_do").HasMaxLength(10).IsUnicode(false);
+            e.Property(x => x.DangDung).HasColumnName("dang_dung");
         });
 
         b.Entity<Camera>(e =>

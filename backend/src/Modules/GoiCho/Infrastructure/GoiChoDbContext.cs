@@ -29,6 +29,8 @@ public class GoiChoDbContext : DbContext
             e.Property(x => x.TaoLuc).HasColumnName("tao_luc");
             e.Property(x => x.LyDoGo).HasColumnName("ly_do_go");
             e.Property(x => x.LyDoTuChoi).HasColumnName("ly_do_tu_choi");
+            e.Property(x => x.DuyetLuc).HasColumnName("duyet_luc").HasColumnType("datetime2(0)");
+            e.Property(x => x.DuyetBoiId).HasColumnName("duyet_boi_id");
         });
         b.Entity<LoaiXe>(e =>
         {

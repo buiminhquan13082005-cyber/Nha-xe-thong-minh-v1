@@ -61,18 +61,65 @@ public class XeQuery : IXeQuery
         return ds.OrderByDescending(x => x.NgayBatDau).ToList();
     }
 
+    /// <summary>
+    /// Trạng thái gói tính theo hạn xa nhất của các gói không huỷ (gồm cả gói gia hạn mua trước):
+    /// &gt; 72 giờ nữa: CON_HAN · còn tới 72 giờ: SAP_HET · đã hết / chưa mua: CHUA_CO.
+    /// "Đang trong bãi" đọc bản sao xe_trong_bai của chính GoiCho. Tìm và lọc làm ở DB, phân trang OFFSET / FETCH.
+    /// q chỉ gồm A–Z, 0–9 (BienSo.ChuanHoaTim) và đi dưới dạng tham số.
+    /// </summary>
+    public async Task<(int Tong, IReadOnlyList<XeQuanLyDto> Ds)> TimXeDaDuyetAsync(string q, string loc, int boQua, int lay, CancellationToken ct)
+    {
+        var tong = await _db.Database.SqlQuery<int>($"""
+            SELECT COUNT(*) AS Value
+            FROM dbo.xe x
+            OUTER APPLY (SELECT MAX(d.ngay_ket_thuc) AS het_han FROM dbo.dang_ky_cho d WHERE d.xe_id = x.id AND d.trang_thai <> 'HUY') hh
+            WHERE x.trang_thai_duyet = 'DA_DUYET' AND x.bien_so LIKE '%' + {q} + '%'
+              AND ({loc} = 'TAT_CA'
+                   OR ({loc} = 'TRONG_BAI' AND EXISTS (SELECT 1 FROM dbo.xe_trong_bai t WHERE t.xe_id = x.id))
+                   OR ({loc} = 'CON_HAN' AND hh.het_han > DATEADD(HOUR, 72, SYSDATETIME()))
+                   OR ({loc} = 'SAP_HET' AND hh.het_han > SYSDATETIME() AND hh.het_han <= DATEADD(HOUR, 72, SYSDATETIME()))
+                   OR ({loc} = 'CHUA_CO' AND (hh.het_han IS NULL OR hh.het_han <= SYSDATETIME())))
+            """).SingleAsync(ct);
+        if (tong == 0 || boQua >= tong) return (tong, Array.Empty<XeQuanLyDto>());
+
+        var ds = await _db.Database.SqlQuery<XeQuanLyDto>($"""
+            SELECT x.id AS XeId, x.bien_so AS BienSo, x.loai_xe_id AS LoaiXeId, x.tai_khoan_id AS ChuXeId,
+                   CAST(N'' AS NVARCHAR(100)) AS TenChuXe, hh.het_han AS HetHanLuc, CAST(0 AS BIT) AS DangTrongBai,
+                   (SELECT TOP 1 g.ten FROM dbo.dang_ky_cho d JOIN dbo.goi_cho g ON g.id = d.goi_cho_id
+                     WHERE d.xe_id = x.id AND d.trang_thai = 'CON_HAN'
+                       AND d.ngay_bat_dau <= SYSDATETIME() AND d.ngay_ket_thuc > SYSDATETIME()
+                     ORDER BY d.ngay_bat_dau DESC) AS TenGoiHienTai,
+                   CAST(CASE WHEN hh.het_han > DATEADD(HOUR, 72, SYSDATETIME()) THEN 'CON_HAN'
+                             WHEN hh.het_han > SYSDATETIME() THEN 'SAP_HET' ELSE 'CHUA_CO' END AS VARCHAR(10)) AS TrangThaiGoi
+            FROM dbo.xe x
+            OUTER APPLY (SELECT MAX(d.ngay_ket_thuc) AS het_han FROM dbo.dang_ky_cho d WHERE d.xe_id = x.id AND d.trang_thai <> 'HUY') hh
+            WHERE x.trang_thai_duyet = 'DA_DUYET' AND x.bien_so LIKE '%' + {q} + '%'
+              AND ({loc} = 'TAT_CA'
+                   OR ({loc} = 'TRONG_BAI' AND EXISTS (SELECT 1 FROM dbo.xe_trong_bai t WHERE t.xe_id = x.id))
+                   OR ({loc} = 'CON_HAN' AND hh.het_han > DATEADD(HOUR, 72, SYSDATETIME()))
+                   OR ({loc} = 'SAP_HET' AND hh.het_han > SYSDATETIME() AND hh.het_han <= DATEADD(HOUR, 72, SYSDATETIME()))
+                   OR ({loc} = 'CHUA_CO' AND (hh.het_han IS NULL OR hh.het_han <= SYSDATETIME())))
+            ORDER BY x.id DESC
+            OFFSET {boQua} ROWS FETCH NEXT {lay} ROWS ONLY
+            """).ToListAsync(ct);
+        return (tong, ds);
+    }
+
     public async Task<IReadOnlyList<XeQuanLyDto>> LayXeDaDuyetAsync(CancellationToken ct)
     {
         var ds = await _db.Database.SqlQuery<XeQuanLyDto>($"""
             SELECT x.id AS XeId, x.bien_so AS BienSo, x.loai_xe_id AS LoaiXeId, x.tai_khoan_id AS ChuXeId,
                    CAST(N'' AS NVARCHAR(100)) AS TenChuXe,
                    (SELECT MAX(d.ngay_ket_thuc) FROM dbo.dang_ky_cho d WHERE d.xe_id = x.id AND d.trang_thai <> 'HUY') AS HetHanLuc,
-                   CAST(0 AS BIT) AS DangTrongBai
+                   CAST(0 AS BIT) AS DangTrongBai, CAST(NULL AS NVARCHAR(50)) AS TenGoiHienTai, CAST('CHUA_CO' AS VARCHAR(10)) AS TrangThaiGoi
             FROM dbo.xe x
             WHERE x.trang_thai_duyet = 'DA_DUYET'
             """).ToListAsync(ct);
         return ds.OrderBy(x => x.XeId).ToList();
     }
+
+    public Task<int> DemChoDuyetAsync(CancellationToken ct) =>
+        _db.Database.SqlQuery<int>($"SELECT COUNT(*) AS Value FROM dbo.xe WHERE trang_thai_duyet = 'CHO_DUYET'").SingleAsync(ct);
 
     /// <summary>Cho module khác (qua IGoiChoModule): biển số, loại xe, chủ, hạn gói. Nợ quá hạn ghép ở GoiChoModule.</summary>
     public async Task<IReadOnlyList<TinhTrangXeRow>> LayTinhTrangXeAsync(IReadOnlyCollection<int> xeIds, CancellationToken ct)

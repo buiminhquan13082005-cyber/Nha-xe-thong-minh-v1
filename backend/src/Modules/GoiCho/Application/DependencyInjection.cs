@@ -23,7 +23,9 @@ public static class DependencyInjection
         s.AddScoped<DuyetXeUseCase>();
         s.AddScoped<XemHuyGoiUseCase>();
         s.AddScoped<HuyGoiUseCase>();
-        s.AddScoped<LayXeDaDuyetUseCase>();
+        s.AddScoped<TimXeDaDuyetUseCase>();
+        s.AddScoped<DemXeChoDuyetUseCase>();
+        s.AddScoped<LayChiTietXeAdminUseCase>();
         s.AddScoped<GoXeUseCase>();
         s.AddScoped<LayLichSuGoiAdminUseCase>();
         s.AddScoped<AdminXemHuyGoiUseCase>();

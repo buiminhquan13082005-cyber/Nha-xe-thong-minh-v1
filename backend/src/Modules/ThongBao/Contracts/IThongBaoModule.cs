@@ -37,4 +37,8 @@ public static class LoaiThongBao
     public const string DoiSoat = "DOI_SOAT";
     /// <summary>Đã xác nhận ra nhưng còn phí quá hạn: trả phí rồi barrier mới mở.</summary>
     public const string ChoThanhToan = "CHO_THANH_TOAN";
+    /// <summary>Gửi Admin: có xe mới (đã có ảnh giấy đăng ký) hoặc xe gửi lại sau khi bị từ chối, đang chờ duyệt (V011).</summary>
+    public const string XeChoDuyet = "XE_CHO_DUYET";
+    /// <summary>Gửi chủ xe: xe được duyệt / bị từ chối (V011).</summary>
+    public const string KetQuaDuyet = "KET_QUA_DUYET";
 }

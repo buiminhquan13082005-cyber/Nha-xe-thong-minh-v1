@@ -32,8 +32,17 @@ public class FakeTimXeRepository : ITimXeRepository
         Task.FromResult(Giu.FirstOrDefault(g => g.LuotGuiId == luotGuiId && g.TrangThai == TrangThaiGiu.DangGiu));
     public Task<IReadOnlyDictionary<int, int>> DemGiuTheoKhuAsync(DateTime bayGio, CancellationToken ct) =>
         Task.FromResult<IReadOnlyDictionary<int, int>>(Giu.Where(g => g.ConGiu(bayGio)).GroupBy(g => g.KhuId).ToDictionary(g => g.Key, g => g.Count()));
-    public Task<IReadOnlyList<GiuChoKhu>> LayGiuQuaHanAsync(DateTime bayGio, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<GiuChoKhu>>(Giu.Where(g => g.TrangThai == TrangThaiGiu.DangGiu && g.HetHanLuc <= bayGio).ToList());
+    public List<DiSaiKhu> DiSai { get; } = new();
+    /// <summary>Giống câu UPDATE ... OUTPUT thật: đổi trạng thái và trả các suất vừa đổi (gọi lại lần hai không trả lại).</summary>
+    public Task<IReadOnlyList<GiuChoKhu>> KetThucQuaHanAsync(DateTime bayGio, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<GiuChoKhu>>(Giu.Where(g => g.HetHan(bayGio)).ToList());
+    public Task<DateTime?> LayLanSaiCuoiAsync(int luotGuiId, int khuId, CancellationToken ct) =>
+        Task.FromResult(DiSai.Where(d => d.LuotGuiId == luotGuiId && d.KhuThucTeId == khuId).Select(d => (DateTime?)d.Luc).Max());
+    public Task<IReadOnlyList<DiSaiKhu>> LayDiSaiGanDayAsync(int soDong, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<DiSaiKhu>>(DiSai.OrderByDescending(d => d.Luc).Take(soDong).ToList());
+    public Task<IReadOnlyList<DemDiSai>> DemDiSaiTheoChuXeAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<DemDiSai>>(DiSai.GroupBy(d => d.ChuXeId)
+            .Select(g => new DemDiSai(g.Key, g.Count(), g.Count(x => x.KhuDay), g.Max(x => x.Luc))).OrderByDescending(x => x.SoLan).ToList());
     public Task<ViTriXe?> LayGhiCuoiAsync(int luotGuiId, CancellationToken ct) =>
         Task.FromResult(ViTri.Where(v => v.LuotGuiId == luotGuiId).OrderBy(v => v.ThayLuc).LastOrDefault());
     public Task<DateTime?> LayLanCuoiTaiCameraAsync(int luotGuiId, int cameraId, CancellationToken ct) =>
@@ -43,12 +52,13 @@ public class FakeTimXeRepository : ITimXeRepository
     public Task<ThongKeDinhVi> LayThongKeAsync(DateTime tu, DateTime den, CancellationToken ct) => Task.FromResult(new ThongKeDinhVi(0, 0, 0, 0, 0));
     public void Them(GiuChoKhu g) => _cho.Add(g);
     public void Them(ViTriXe v) => _cho.Add(v);
+    public void Them(DiSaiKhu d) => _cho.Add(d);
     public Task LuuAsync(CancellationToken ct)
     {
         foreach (var o in _cho)
         {
-            o.GetType().GetProperty("Id")!.SetValue(o, o is ViTriXe ? (object)(long)++_id : ++_id);
-            if (o is GiuChoKhu g) Giu.Add(g); else ViTri.Add((ViTriXe)o);
+            o.GetType().GetProperty("Id")!.SetValue(o, o is ViTriXe or DiSaiKhu ? (object)(long)++_id : ++_id);
+            if (o is GiuChoKhu g) Giu.Add(g); else if (o is DiSaiKhu d) DiSai.Add(d); else ViTri.Add((ViTriXe)o);
         }
         _cho.Clear();
         return Task.CompletedTask;
@@ -118,6 +128,26 @@ public class TimXeTests
         // sự kiện tới lần hai: không giữ thêm
         await Nghe().XuLyAsync(new XeDaVao(10, 2, _clock.BayGio), default);
         Assert.Equal(2, _repo.Giu.Count);
+    }
+
+    [Fact]
+    public async Task KhuDangTat_KhongDuocChon_KhongHienChoNguoiDung_KhongBaoDaDoDuoc()
+    {
+        // Khu D gần cổng nhất nhưng tạm tắt (V009 tắt khu mẫu): xe được mời sang Khu C
+        _bai.Khu[2] = _bai.Khu[2] with { DangDung = false };
+        await VaoCong(2, 10);
+        Assert.Equal(3, Assert.Single(_repo.Giu).KhuId);
+
+        Assert.DoesNotContain(await Muc().ThucHienAsync(true), k => k.Id == 4);           // trang người dùng: ẩn
+        Assert.False((await Muc().ThucHienAsync(false)).Single(k => k.Id == 4).DangDung);  // sơ đồ / Admin: còn, kèm cờ
+        Assert.Equal("KHU_DANG_TAT", (await Assert.ThrowsAsync<LoiNghiepVu>(() => DaDo().ThucHienAsync(2, 2, 4))).Ma);
+    }
+
+    [Fact]
+    public async Task MaSoDo_TraVeTrongMucCho()
+    {
+        _bai.Khu.Add(new(10, "Khu R", 2, 60, 40, "R"));
+        Assert.Equal("R", (await Muc().ThucHienAsync(true)).Single(k => k.Id == 10).MaSoDo);
     }
 
     [Fact]

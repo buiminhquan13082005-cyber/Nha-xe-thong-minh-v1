@@ -68,3 +68,23 @@ public class HopThuTests
         Assert.Equal(1, await new DemChuaDocUseCase(s).ThucHienAsync(3));
     }
 }
+
+/// <summary>
+/// Hằng số loại thông báo ở Contracts (module khác dùng để gửi) phải nằm trong danh sách hợp lệ của Domain ThongBao,
+/// nếu không thông báo bị từ chối âm thầm (lỗi thật đã gặp khi thêm XE_CHO_DUYET / KET_QUA_DUYET).
+/// </summary>
+public class LoaiThongBaoKhopTests
+{
+    [Fact]
+    public void MoiLoaiOContracts_DeuHopLeODomain()
+    {
+        var contracts = typeof(NhaXe.Modules.ThongBao.Contracts.LoaiThongBao)
+            .GetFields().Where(f => f.IsLiteral).Select(f => (string)f.GetRawConstantValue()!).ToList();
+        Assert.NotEmpty(contracts);
+        Assert.All(contracts, l => Assert.Contains(l, NhaXe.Modules.ThongBao.Domain.LoaiThongBao.HopLe));
+    }
+
+    [Fact]
+    public void AdminThayThongBaoXeChoDuyet() =>
+        Assert.Contains("XE_CHO_DUYET", NhaXe.Modules.ThongBao.Domain.LoaiThongBao.HopThuAdmin);
+}

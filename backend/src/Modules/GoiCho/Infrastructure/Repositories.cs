@@ -41,6 +41,8 @@ public class GoiChoRepository : IGoiChoRepository
     public Task LuuAsync(CancellationToken ct) => _db.SaveChangesAsync(ct);
 
     public Task<bool> TonTaiLoaiXeAsync(int loaiXeId, CancellationToken ct) => _db.LoaiXes.AnyAsync(l => l.Id == loaiXeId, ct);
+    public Task<string?> LayMaLoaiXeAsync(int loaiXeId, CancellationToken ct) =>
+        _db.LoaiXes.Where(l => l.Id == loaiXeId).Select(l => (string?)l.Ten).FirstOrDefaultAsync(ct);
 }
 
 /// <summary>Đọc bảng cau_hinh; thiếu dòng hoặc sai định dạng thì dùng giá trị mặc định.</summary>

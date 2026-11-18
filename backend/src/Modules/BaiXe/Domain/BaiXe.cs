@@ -14,15 +14,28 @@ public class KhuVuc
     public int LoaiXeId { get; private set; }
     /// <summary>Số xe tối đa của khu (đề cương v10). Tổng các khu cùng loại nên bằng sức chứa của loại xe.</summary>
     public int SucChua { get; private set; }
+    /// <summary>Mã chấm trên ảnh sơ đồ (R, S, HAM; V009). null: khu không có chấm trên ảnh.</summary>
+    public string? MaSoDo { get; private set; }
+    /// <summary>false: khu tạm tắt, không được chọn khi chỉ dẫn và không hiện cho người dùng (dữ liệu vẫn giữ).</summary>
+    public bool DangDung { get; private set; } = true;
+
+    public const int SucChuaToiDa = 10000;
+    /// <summary>Mỗi khu xe máy chứa tối đa 80 xe (quy định của bãi).</summary>
+    public const int SucChuaToiDaXeMay = 80;
 
     private KhuVuc() { }
 
-    public void DatSucChua(int sucChua)
+    /// <param name="laXeMay">Khu xe máy thì tối đa <see cref="SucChuaToiDaXeMay"/>.</param>
+    public void DatSucChua(int sucChua, bool laXeMay = false)
     {
-        if (sucChua is < 0 or > 10000)
-            throw new LoiNghiepVu(LoaiLoi.DuLieuKhongHopLe, "SUC_CHUA_KHU_SAI", "Sức chứa khu phải từ 0 đến 10000.");
+        var toiDa = laXeMay ? SucChuaToiDaXeMay : SucChuaToiDa;
+        if (sucChua < 0 || sucChua > toiDa)
+            throw new LoiNghiepVu(LoaiLoi.DuLieuKhongHopLe, "SUC_CHUA_KHU_SAI",
+                laXeMay ? $"Sức chứa khu xe máy phải từ 0 đến {toiDa} xe." : $"Sức chứa khu phải từ 0 đến {toiDa}.");
         SucChua = sucChua;
     }
+
+    public void DatDangDung(bool dangDung) => DangDung = dangDung;
 
     /// <param name="loaiXeHopLe">Các loại xe đang có (hỏi GoiCho qua IGoiChoModule, vì loai_xe là bảng của GoiCho).</param>
     public static KhuVuc Tao(string? ten, int loaiXeId, IReadOnlyCollection<int> loaiXeHopLe)

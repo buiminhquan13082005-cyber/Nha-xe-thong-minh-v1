@@ -25,10 +25,15 @@ IF COL_LENGTH('dbo.dang_ky_cho', 'ngay_nhac_qua_han') IS NULL
 GO
 /* Loại thông báo mới: KHU (chỉ dẫn / ghi nhận khu), NHOM (nhóm gia đình), DOI_SOAT (Admin: biển lạ, lệch khu, chưa định vị),
    CHO_THANH_TOAN (xác nhận ra nhưng còn phí quá hạn) */
-IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_tb_loai')
-    ALTER TABLE dbo.thong_bao DROP CONSTRAINT CK_tb_loai;
-ALTER TABLE dbo.thong_bao ADD CONSTRAINT CK_tb_loai CHECK (loai IN ('VAO', 'RA', 'SAP_HET_HAN', 'HET_HAN', 'QUA_HAN',
-    'NGHI_MAT', 'HUY_GOI', 'XE_BI_GO', 'KHACH_HUY', 'KHU', 'NHOM', 'DOI_SOAT', 'CHO_THANH_TOAN'));
+-- Chỉ làm khi ràng buộc chưa có các loại này: migration sau (V011) mở rộng thêm loại, chạy lại V005 không được ghi đè bản rộng hơn
+-- (ghi đè sẽ lỗi khi đã có thông báo loại mới).
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_tb_loai' AND definition LIKE '%CHO_THANH_TOAN%')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_tb_loai')
+        ALTER TABLE dbo.thong_bao DROP CONSTRAINT CK_tb_loai;
+    ALTER TABLE dbo.thong_bao ADD CONSTRAINT CK_tb_loai CHECK (loai IN ('VAO', 'RA', 'SAP_HET_HAN', 'HET_HAN', 'QUA_HAN',
+        'NGHI_MAT', 'HUY_GOI', 'XE_BI_GO', 'KHACH_HUY', 'KHU', 'NHOM', 'DOI_SOAT', 'CHO_THANH_TOAN'));
+END
 GO
 MERGE dbo.cau_hinh AS d
 USING (VALUES

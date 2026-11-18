@@ -32,7 +32,7 @@ public class LayCauHinhBaiUseCase
         return new CauHinhBaiDto(
             loai,
             khu.OrderBy(k => k.Ten).Select(k => new KhuQuanLyDto(k.Id, k.Ten, k.LoaiXeId, o.Count(x => x.KhuId == k.Id),
-                                                                 cam.Count(c => c.KhuId == k.Id), k.SucChua)).ToList(),
+                                                                 cam.Count(c => c.KhuId == k.Id), k.SucChua, k.MaSoDo, k.DangDung)).ToList(),
             o.OrderBy(x => x.MaO).Select(x =>
             {
                 var t = tt.GetValueOrDefault(x.Id);
@@ -52,8 +52,10 @@ public class ThemKhuUseCase
 
     public async Task<int> ThucHienAsync(KhuLenh lenh, CancellationToken ct = default)
     {
-        var khu = KhuVuc.Tao(lenh.Ten, lenh.LoaiXeId, await LoaiXe.HopLeAsync(_goiCho, ct));
-        if (lenh.SucChua is int sc) khu.DatSucChua(sc);
+        var loai = await _goiCho.LaySucChuaAsync(ct);
+        var khu = KhuVuc.Tao(lenh.Ten, lenh.LoaiXeId, LoaiXe.Ids(loai));
+        if (lenh.SucChua is int sc) khu.DatSucChua(sc, LoaiXe.LaXeMay(loai, khu.LoaiXeId));
+        if (lenh.DangDung is bool dd) khu.DatDangDung(dd);
         if (await _repo.TrungTenKhuAsync(khu.Ten, null, ct)) throw Loi.XungDot("TRUNG_TEN_KHU", $"Đã có khu tên \"{khu.Ten}\".");
         _repo.Them(khu);
         await _repo.LuuAsync(ct);
@@ -73,8 +75,11 @@ public class SuaKhuUseCase
         // đổi loại xe của khu đang có ô sẽ làm sai sức chứa thực tế: chỉ cho đổi khi khu chưa có ô
         if (lenh.LoaiXeId != khu.LoaiXeId && await _repo.DemOCuaKhuAsync(id, ct) > 0)
             throw Loi.XungDot("KHU_CON_O", "Khu đã có ô, không đổi loại xe được. Xoá hết ô trước.");
-        khu.Sua(lenh.Ten, lenh.LoaiXeId, await LoaiXe.HopLeAsync(_goiCho, ct));
-        if (lenh.SucChua is int sc) khu.DatSucChua(sc);
+        var loai = await _goiCho.LaySucChuaAsync(ct);
+        khu.Sua(lenh.Ten, lenh.LoaiXeId, LoaiXe.Ids(loai));
+        // không gửi sức chứa mà đổi sang loại xe máy: vẫn kiểm tra số đang có không vượt 80
+        khu.DatSucChua(lenh.SucChua ?? khu.SucChua, LoaiXe.LaXeMay(loai, khu.LoaiXeId));
+        if (lenh.DangDung is bool dd) khu.DatDangDung(dd);
         if (await _repo.TrungTenKhuAsync(khu.Ten, id, ct)) throw Loi.XungDot("TRUNG_TEN_KHU", $"Đã có khu tên \"{khu.Ten}\".");
         await _repo.LuuAsync(ct);
     }
@@ -233,7 +238,8 @@ public class LayChoTrongUseCase
         var khu = await _q.LayKhuAsync(ct);
         var o = await _q.LayOAsync(ct);
         var tt = (await _q.LayTrangThaiOAsync(ct)).ToDictionary(t => t.OId);
-        var ds = khu.OrderBy(k => k.Ten).Select(k =>
+        // Khu tạm tắt (VD Khu A, B ô tô chưa làm) không hiện cho khách
+        var ds = khu.Where(k => k.DangDung).OrderBy(k => k.Ten).Select(k =>
         {
             var dsO = o.Where(x => x.KhuId == k.Id).OrderBy(x => x.MaO)
                        .Select(x => new OChoTrongDto(x.Id, x.MaO, TrangThaiO.HienThi(tt.GetValueOrDefault(x.Id), bayGio))).ToList();
@@ -264,7 +270,7 @@ public class BaiXeModule : IBaiXeModule
         {
             var dau = nut.FirstOrDefault(n => n.KhuId == k.Id);
             double? d = dau is not null && kc.TryGetValue(dau.Id, out var x) ? Math.Round(x, 2) : null;
-            return new KhuThongTin(k.Id, k.Ten, k.LoaiXeId, k.SucChua, d);
+            return new KhuThongTin(k.Id, k.Ten, k.LoaiXeId, k.SucChua, d, k.MaSoDo, k.DangDung);
         }).ToList();
     }
 
@@ -305,6 +311,9 @@ public class BaiXeModule : IBaiXeModule
 internal static class LoaiXe
 {
     /// <summary>Loại xe là dữ liệu của GoiCho (bảng loai_xe): hỏi qua IGoiChoModule, không đọc bảng.</summary>
-    public static async Task<IReadOnlyCollection<int>> HopLeAsync(IGoiChoModule goiCho, CancellationToken ct) =>
-        (await goiCho.LaySucChuaAsync(ct)).Select(s => s.LoaiXeId).ToList();
+    public static IReadOnlyCollection<int> Ids(IReadOnlyList<SucChuaLoaiXe> loai) => loai.Select(s => s.LoaiXeId).ToList();
+
+    /// <summary>Mã loại xe máy là "XE_MAY" (bảng loai_xe của GoiCho).</summary>
+    public static bool LaXeMay(IReadOnlyList<SucChuaLoaiXe> loai, int loaiXeId) =>
+        loai.Any(l => l.LoaiXeId == loaiXeId && l.LoaiXe == "XE_MAY");
 }

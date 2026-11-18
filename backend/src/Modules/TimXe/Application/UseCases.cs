@@ -54,11 +54,18 @@ public class NgheCongTimXe(IGoiChoModule goiCho, TinhChoKhu tinhCho, ITimXeRepos
         var xe = (await goiCho.LayTinhTrangXeAsync(new[] { e.XeId }, ct)).GetValueOrDefault(e.XeId);
         if (xe is null || xe.LoaiXe != LoaiXeMa.XeMay) return; // ô tô: chưa làm phần chỉ khu
         var bayGio = clock.BayGio;
-        var khu = (await tinhCho.ThucHienAsync(bayGio, ct: ct)).Where(k => k.ThongTin.LoaiXeId == xe.LoaiXeId).ToList();
-        var chon = QuyTacKhu.ChonKhu(khu.Select(k => new QuyTacKhu.UngVienKhu(k.ThongTin.Id, k.ConLai, k.ThongTin.KhoangCachTuCong)));
+        var khu = (await tinhCho.ThucHienAsync(bayGio, ct: ct)).Where(k => k.ThongTin.LoaiXeId == xe.LoaiXeId && k.ThongTin.DangDung).ToList();
+        var pt = await cauHinh.LayAsync(KhoaCauHinh.PhanTramSapDay, 20, ct);
+        var chon = QuyTacKhu.ChonKhu(khu.Select(k => new QuyTacKhu.UngVienKhu(k.ThongTin.Id, k.ThongTin.SucChua, k.ConLai, k.ThongTin.KhoangCachTuCong)), pt);
         if (chon is null)
         {
             await thongBao.GuiChoMoiAdminAsync(LoaiThongBao.DoiSoat, $"Xe {xe.BienSo} vào bãi nhưng mọi khu xe máy đã đầy (theo số xe ghi và suất giữ). Kiểm tra số liệu khu.", ct);
+            try
+            {
+                await thongBao.GuiNhieuAsync(await goiCho.LayNguoiDungXeAsync(e.XeId, ct), LoaiThongBao.Khu,
+                    $"Xe {xe.BienSo}: bãi xe máy đã hết chỗ (R, S, Hầm đều đầy). Vui lòng hỏi nhân viên bãi.", ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException) { log?.LogWarning(ex, "Báo hết chỗ lỗi"); }
             return;
         }
         var phut = await cauHinh.LayAsync(KhoaCauHinh.PhutGiu, 5, ct);
@@ -68,7 +75,7 @@ public class NgheCongTimXe(IGoiChoModule goiCho, TinhChoKhu tinhCho, ITimXeRepos
         try
         {
             await thongBao.GuiNhieuAsync(await goiCho.LayNguoiDungXeAsync(e.XeId, ct), LoaiThongBao.Khu,
-                $"Xe {xe.BienSo}: mời vào {ten}. Bãi giữ cho bạn 1 chỗ trong {phut} phút, mở mục Tìm xe để xem đường đi.", ct);
+                $"Xe {xe.BienSo}: mời vào {ten}. Bãi giữ cho bạn 1 chỗ trong {phut} phút, mở bản đồ để xem đường đi.", ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException) { log?.LogWarning(ex, "Gửi chỉ dẫn khu lỗi"); }
     }
@@ -109,6 +116,8 @@ public static class KetQuaCamera
     public const string KhongKhop = "KHONG_KHOP";
     /// <summary>Tự quét: khung hình không có biển số (không ghi gì, không báo ai).</summary>
     public const string KhongThayBien = "KHONG_THAY_BIEN";
+    /// <summary>Camera VÀO thấy xe ở khu đã đầy: nhân viên không cho vào, KHÔNG +1; báo người dùng sang khu đích, báo Admin.</summary>
+    public const string KhuDay = "KHU_DAY";
 }
 
 /// <summary>
@@ -122,6 +131,9 @@ public class XuLyCameraKhuUseCase(IBaiXeModule baiXe, ICongRaVaoModule cong, IGo
                                   ITimXeRepository repo, ICauHinhTimXe cauHinh, IThongBaoModule thongBao, IClock clock,
                                   TinhChoKhu? tinhCho = null, ILogger<XuLyCameraKhuUseCase>? log = null)
 {
+    /// <summary>Số liệu chỗ của khu để kiểm tra "khu đầy" trước khi +1 (luôn có, kể cả khi test không truyền tinhCho).</summary>
+    private readonly TinhChoKhu _tinh = tinhCho ?? new TinhChoKhu(baiXe, cong, repo);
+
     public static bool LaCameraKhu(string vaiTro) =>
         vaiTro is VaiTroCameraCongKhai.KhuVao or VaiTroCameraCongKhai.KhuRa or VaiTroCameraCongKhai.LoiVaoKhu;
 
@@ -191,19 +203,69 @@ public class XuLyCameraKhuUseCase(IBaiXeModule baiXe, ICongRaVaoModule cong, IGo
             return new(KetQuaCamera.BoQua, tt.BienSo, cam.KhuId, HuongDi.Ra, $"Xe {tt.BienSo} chưa được ghi trong {tenKhu}: không trừ số xe",
                        null, tinCay, khung, tenKhu, await SoXeAsync(cam.KhuId, ct), khu?.SucChua);
 
+        // 5. Khu đầy (với xe này): nhân viên không cho vào, camera KHÔNG +1. Phiên dẫn đường vẫn chỉ tới khu đích.
+        var giu = huong == HuongDi.Vao ? await repo.TimGiuDangGiuAsync(luot.LuotGuiId, ct) : null;
+        if (huong == HuongDi.Vao)
+        {
+            var so = (await _tinh.ThucHienAsync(bayGio, dangMo, ct)).FirstOrDefault(k => k.ThongTin.Id == cam.KhuId);
+            var coSuatODay = giu is not null && giu.ConGiu(bayGio) && giu.KhuId == cam.KhuId;
+            if (so is { ThongTin.SucChua: > 0 } && QuyTacKhu.KhuDayVoiXe(so.ThongTin.SucChua, so.SoXe, so.SoGiu, coSuatODay))
+                return await KhuDayAsync(cam.KhuId, tenKhu, luot, tt, giu, giay, so.SoXe, so.ThongTin.SucChua, tinCay, khung, bayGio, ct);
+        }
+
+        // 6. Ghi. Xe có phiên dẫn đường: đúng khu đích → DA_TOI, khu khác → TOI_KHU_KHAC (tin camera, nhả suất ở khu đích, ghi lần đi sai)
         repo.Them(ViTriXe.TuCamera(luot.LuotGuiId, cameraId, cam.KhuId, tt.BienSo, tinCay, huong, bayGio));
-        if (huong == HuongDi.Vao) (await repo.TimGiuDangGiuAsync(luot.LuotGuiId, ct))?.DaVao(bayGio);
+        var khuDichCu = giu?.KhuId;
+        var diSai = giu is not null && giu.DaVao(cam.KhuId, bayGio);
+        if (diSai) repo.Them(DiSaiKhu.Tao(luot.LuotGuiId, luot.XeId, tt.ChuXeId, tt.BienSo, khuDichCu, cam.KhuId, false, bayGio));
         await repo.LuuAsync(ct);
         await cong.GhiViTriAsync(luot.LuotGuiId, huong == HuongDi.Vao ? cam.KhuId : null, huong == HuongDi.Vao ? NguonGhi.CameraKhu : null, bayGio, ct);
 
         if (khu is not null && khu.LoaiXeId != tt.LoaiXeId)
             await BaoAdmin($"Xe {tt.BienSo} ({tt.LoaiXe}) vừa đi qua camera {tenKhu} không dành cho loại xe này.", ct);
         if (huong == HuongDi.Vao)
-            await Bao(goiCho.LayNguoiDungXeAsync(luot.XeId, ct), $"Xe {tt.BienSo} đã vào {tenKhu} lúc {bayGio:HH:mm}.", ct);
+        {
+            var tenDich = khuDichCu is int kd ? await TenKhuAsync(kd, ct) : null;
+            var noiDung = giu is null ? $"Xe {tt.BienSo} đã vào {tenKhu} lúc {bayGio:HH:mm}."
+                : diSai ? $"Xe {tt.BienSo}: bạn đã đỗ tại {tenKhu} (khác khu được chỉ định {tenDich}). Không sao, hệ thống ghi theo camera."
+                : $"Đã đến bãi đỗ thành công: xe {tt.BienSo} đang đỗ tại {tenKhu} (vào lúc {bayGio:HH:mm}).";
+            await Bao(goiCho.LayNguoiDungXeAsync(luot.XeId, ct), noiDung, ct);
+        }
         return new(KetQuaCamera.DaGhi, tt.BienSo, cam.KhuId, huong,
             huong == HuongDi.Vao ? $"Xe {tt.BienSo} vào {tenKhu}" : $"Xe {tt.BienSo} ra khỏi {tenKhu}",
             null, tinCay, khung, tenKhu, await SoXeAsync(cam.KhuId, ct), khu?.SucChua);
     }
+
+    /// <summary>
+    /// Xe tới khu đã đầy: không ghi vào khu. Ghi một lần đi sai (khu đầy) để Admin xem, báo người dùng sang khu đích
+    /// (hoặc khu khác còn chỗ nếu không có phiên dẫn đường), báo Admin. Camera tự quét mỗi giây nên trong khoảng chống đọc lặp
+    /// chỉ báo một lần.
+    /// </summary>
+    private async Task<KetQuaCameraKhuDto> KhuDayAsync(int khuId, string tenKhu, LuotGuiDangMo luot, TinhTrangXeGoi tt, GiuChoKhu? giu,
+                                                       int giayChongLap, int soXe, int sucChua, decimal? tinCay, KhungBienDto? khung,
+                                                       DateTime bayGio, CancellationToken ct)
+    {
+        var ketQua = new KetQuaCameraKhuDto(KetQuaCamera.KhuDay, tt.BienSo, khuId, HuongDi.Vao,
+            $"{tenKhu} đã đầy: không ghi xe {tt.BienSo} vào khu (nhân viên hướng dẫn xe sang khu khác)", null, tinCay, khung, tenKhu, soXe, sucChua);
+        if (QuyTacKhu.DocLap(await repo.LayLanSaiCuoiAsync(luot.LuotGuiId, khuId, ct), bayGio, giayChongLap)) return ketQua;
+
+        var dangDan = giu is not null && giu.ConGiu(bayGio);
+        if (dangDan) giu!.GhiToiKhuDay(khuId, bayGio);
+        repo.Them(DiSaiKhu.Tao(luot.LuotGuiId, luot.XeId, tt.ChuXeId, tt.BienSo, dangDan ? giu!.KhuId : null, khuId, true, bayGio));
+        await repo.LuuAsync(ct);
+
+        var tenDich = dangDan ? await TenKhuAsync(giu!.KhuId, ct) : null;
+        await Bao(goiCho.LayNguoiDungXeAsync(luot.XeId, ct), dangDan
+            ? $"{tenKhu} đã đầy, mời bạn sang {tenDich}. Mở bản đồ để xem đường đi."
+            : $"{tenKhu} đã đầy, mời bạn sang khu khác còn chỗ (xem Sơ đồ chỗ trống).", ct);
+        await BaoAdmin(dangDan
+            ? $"Xe {tt.BienSo} được chỉ tới {tenDich} nhưng tới {tenKhu} (đã đầy) lúc {bayGio:HH:mm}. Nhân viên không cho vào."
+            : $"Xe {tt.BienSo} tới {tenKhu} (đã đầy) lúc {bayGio:HH:mm}, không có chỉ dẫn khu. Nhân viên không cho vào.", ct);
+        return ketQua;
+    }
+
+    private async Task<string> TenKhuAsync(int khuId, CancellationToken ct) =>
+        (await baiXe.LayKhuAsync(ct)).FirstOrDefault(k => k.Id == khuId)?.Ten ?? $"khu #{khuId}";
 
     /// <summary>Số xe đang ghi ở khu (sau khi vừa ghi), để màn hình camera hiện ngay.</summary>
     private async Task<int?> SoXeAsync(int khuId, CancellationToken ct) =>
@@ -255,6 +317,8 @@ public class DaDoXeUseCase(IGoiChoModule goiCho, ICongRaVaoModule cong, IBaiXeMo
             throw new LoiNghiepVu(LoaiLoi.DuLieuKhongHopLe, "CHUA_HO_TRO_O_TO", "Định vị khu hiện chỉ áp dụng cho xe máy.");
         if (khu.LoaiXeId != xe.LoaiXeId)
             throw new LoiNghiepVu(LoaiLoi.DuLieuKhongHopLe, "SAI_LOAI_KHU", $"{khu.Ten} không dành cho loại xe này.");
+        if (!khu.DangDung)
+            throw new LoiNghiepVu(LoaiLoi.DuLieuKhongHopLe, "KHU_DANG_TAT", $"{khu.Ten} đang tạm đóng.");
         var bayGio = clock.BayGio;
 
         var cuoi = await repo.LayGhiCuoiAsync(luot.LuotGuiId, ct);
@@ -267,7 +331,7 @@ public class DaDoXeUseCase(IGoiChoModule goiCho, ICongRaVaoModule cong, IBaiXeMo
             return $"Camera đã ghi xe ở {tenGhi}, hệ thống giữ theo camera. Admin sẽ kiểm tra.";
         }
         repo.Them(ViTriXe.ThuCong(luot.LuotGuiId, khuId, NguonGhi.NguoiDung, HuongDi.Vao, bayGio));
-        (await repo.TimGiuDangGiuAsync(luot.LuotGuiId, ct))?.DaVao(bayGio);
+        (await repo.TimGiuDangGiuAsync(luot.LuotGuiId, ct))?.DaVao(khuId, bayGio);
         await repo.LuuAsync(ct);
         await cong.GhiViTriAsync(luot.LuotGuiId, khuId, NguonGhi.NguoiDung, bayGio, ct);
         return $"Đã ghi xe ở {khu.Ten}.";
@@ -275,7 +339,10 @@ public class DaDoXeUseCase(IGoiChoModule goiCho, ICongRaVaoModule cong, IBaiXeMo
 }
 
 public record ChiDanDto(int LuotGuiId, int KhuId, string Khu, DateTime HetHanLuc, string TrangThai);
-public record KhuChoDto(int Id, string Ten, int LoaiXeId, int SucChua, int SoXe, int SoGiu, int ConLai, string Muc, double? KhoangCachTuCong);
+/// <param name="MaSoDo">Mã chấm trên ảnh sơ đồ (R, S, HAM).</param>
+/// <param name="DangDung">false: khu tạm tắt.</param>
+public record KhuChoDto(int Id, string Ten, int LoaiXeId, int SucChua, int SoXe, int SoGiu, int ConLai, string Muc, double? KhoangCachTuCong,
+                        string? MaSoDo = null, bool DangDung = true);
 public record XeCuaToiDto(int XeId, string BienSo, string LoaiXe, bool TrongBai, DateTime? ThoiGianVao, int? KhuId, string? Khu,
                           DateTime? VaoKhuLuc, string? NguonKhu, ChiDanDto? MoiVao, DuongDiDto? Duong, bool HoTroDinhVi);
 public record TimXeCuaToiDto(DateTime BayGio, IReadOnlyList<XeCuaToiDto> Xe, IReadOnlyList<KhuChoDto> KhuXeMay);
@@ -283,7 +350,8 @@ public record SoXeKhuDto(DateTime BayGio, IReadOnlyList<KhuChoDto> Khu);
 public record DaDoXeLenh(int XeId, int KhuId);
 public record GanKhuLenh(int LuotGuiId, int? KhuId);
 
-/// <summary>Mức chỗ các khu (Còn nhiều / Sắp đầy / Đầy). Khu xe máy: tính từ dữ liệu, không phải AI.</summary>
+/// <summary>Mức chỗ các khu (Còn nhiều / Sắp đầy / Đầy). Khu xe máy: tính từ dữ liệu, không phải AI.
+/// chiXeMay = true (trang người dùng): chỉ khu xe máy đang dùng. false (sơ đồ, Quản lý bãi): mọi khu, kèm cờ DangDung.</summary>
 public class LayMucChoUseCase(TinhChoKhu tinhCho, ICauHinhTimXe cauHinh, IGoiChoModule goiCho, IClock clock)
 {
     public async Task<IReadOnlyList<KhuChoDto>> ThucHienAsync(bool chiXeMay = true, IReadOnlyList<LuotGuiDangMo>? dangMo = null, CancellationToken ct = default)
@@ -291,9 +359,9 @@ public class LayMucChoUseCase(TinhChoKhu tinhCho, ICauHinhTimXe cauHinh, IGoiCho
         var pt = await cauHinh.LayAsync(KhoaCauHinh.PhanTramSapDay, 20, ct);
         var xeMay = (await goiCho.LaySucChuaAsync(ct)).FirstOrDefault(l => l.LoaiXe == LoaiXeMa.XeMay)?.LoaiXeId;
         return (await tinhCho.ThucHienAsync(clock.BayGio, dangMo, ct))
-            .Where(k => !chiXeMay || k.ThongTin.LoaiXeId == xeMay)
+            .Where(k => !chiXeMay || (k.ThongTin.LoaiXeId == xeMay && k.ThongTin.DangDung))
             .Select(k => new KhuChoDto(k.ThongTin.Id, k.ThongTin.Ten, k.ThongTin.LoaiXeId, k.ThongTin.SucChua, k.SoXe, k.SoGiu, k.ConLai,
-                QuyTacKhu.Muc(k.ThongTin.SucChua, k.ConLai, pt), k.ThongTin.KhoangCachTuCong)).ToList();
+                QuyTacKhu.Muc(k.ThongTin.SucChua, k.ConLai, pt), k.ThongTin.KhoangCachTuCong, k.ThongTin.MaSoDo, k.ThongTin.DangDung)).ToList();
     }
 }
 
@@ -357,7 +425,7 @@ public class AdminGanKhuUseCase(ICongRaVaoModule cong, IBaiXeModule baiXe, ITimX
             _ = (await baiXe.LayKhuAsync(ct)).FirstOrDefault(k => k.Id == khuId)
                 ?? throw new LoiNghiepVu(LoaiLoi.KhongTimThay, "KHONG_TIM_THAY_KHU", "Không tìm thấy khu.");
             repo.Them(ViTriXe.ThuCong(luot.LuotGuiId, khuId, NguonGhi.Admin, HuongDi.Vao, bayGio));
-            (await repo.TimGiuDangGiuAsync(luot.LuotGuiId, ct))?.DaVao(bayGio);
+            (await repo.TimGiuDangGiuAsync(luot.LuotGuiId, ct))?.DaVao(khuId, bayGio);
         }
         else
         {
@@ -369,16 +437,32 @@ public class AdminGanKhuUseCase(ICongRaVaoModule cong, IBaiXeModule baiXe, ITimX
     }
 }
 
-/// <summary>Tác vụ nền gọi mỗi 30 giây: trả các suất giữ quá hạn.</summary>
-public class HetHanGiuChoUseCase(ITimXeRepository repo, IClock clock)
+/// <summary>
+/// Tác vụ nền gọi mỗi 30 giây: quá giờ giữ mà camera khu chưa thấy xe thì phiên thành HET_HAN, nhả suất (không tự gán khu),
+/// báo người dùng "Chưa xác nhận được vị trí xe". Đổi trạng thái bằng MỘT câu UPDATE nên 2 bản API không báo trùng.
+/// </summary>
+public class HetHanGiuChoUseCase(ITimXeRepository repo, IClock clock, ICongRaVaoModule? cong = null, IGoiChoModule? goiCho = null,
+                                 IThongBaoModule? thongBao = null, IBaiXeModule? baiXe = null)
 {
     public async Task<int> ThucHienAsync(CancellationToken ct = default)
     {
-        var bayGio = clock.BayGio;
-        var ds = await repo.LayGiuQuaHanAsync(bayGio, ct);
-        var dem = ds.Count(g => g.HetHan(bayGio));
-        if (dem > 0) await repo.LuuAsync(ct);
-        return dem;
+        var ds = await repo.KetThucQuaHanAsync(clock.BayGio, ct);
+        if (ds.Count == 0 || cong is null || goiCho is null || thongBao is null) return ds.Count;
+        var luot = (await cong.LayLuotGuiDangMoAsync(ct)).ToDictionary(l => l.LuotGuiId);
+        var khu = baiXe is null ? new Dictionary<int, string>() : (await baiXe.LayKhuAsync(ct)).ToDictionary(k => k.Id, k => k.Ten);
+        foreach (var g in ds)
+        {
+            if (!luot.TryGetValue(g.LuotGuiId, out var l)) continue; // xe đã ra
+            try
+            {
+                var bien = (await goiCho.LayTinhTrangXeAsync(new[] { l.XeId }, ct)).GetValueOrDefault(l.XeId)?.BienSo ?? "";
+                await thongBao.GuiNhieuAsync(await goiCho.LayNguoiDungXeAsync(l.XeId, ct), LoaiThongBao.Khu,
+                    $"Xe {bien}: chưa xác nhận được vị trí xe. Hết giờ giữ chỗ ở {khu.GetValueOrDefault(g.KhuId, "khu được chỉ")} mà camera khu chưa thấy xe. "
+                    + "Đỗ xong, bạn có thể bấm \"Đã đỗ xe\" trong mục Tìm xe.", ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException) { /* đã nhả suất; app hỏi lại sẽ thấy HET_HAN */ }
+        }
+        return ds.Count;
     }
 }
 

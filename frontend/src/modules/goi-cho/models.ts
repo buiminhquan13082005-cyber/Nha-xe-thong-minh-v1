@@ -111,6 +111,36 @@ export interface XeQuanLy {
   tenChuXe: string;
   hetHanLuc: string | null;
   dangTrongBai: boolean;
+  /** Tên gói đang dùng (gói còn hạn mới nhất); null: chưa mua / đã hết. */
+  tenGoiHienTai?: string | null;
+  trangThaiGoi?: TrangThaiGoiXe;
+}
+
+/** Trạng thái gói của xe trên trang Quản lý xe. SAP_HET: còn ≤ 72 giờ. CHUA_CO: hết hạn hoặc chưa từng mua. */
+export type TrangThaiGoiXe = 'CON_HAN' | 'SAP_HET' | 'CHUA_CO';
+/** Bộ lọc nhanh tab "Xe đã duyệt". */
+export type LocXeDaDuyet = 'TAT_CA' | 'CON_HAN' | 'SAP_HET' | 'CHUA_CO' | 'TRONG_BAI';
+
+/** GET /api/admin/xe/da-duyet?q=&loc=&trang=&soDong= */
+export interface TrangXeDaDuyet { tong: number; trang: number; soDong: number; ds: XeQuanLy[] }
+
+/** GET /api/admin/xe/{xeId}: mọi thứ cho khung chi tiết xe. */
+export interface ChiTietXeAdmin {
+  xe: {
+    xeId: number; bienSo: string; loaiXeId: number; trangThaiDuyet: TrangThaiDuyet; coAnh: boolean; chiaSeNhom: boolean;
+    taoLuc: string;
+    /** null: xe duyệt trước khi có cột duyet_luc (hiện "Không rõ"). */
+    duyetLuc: string | null; tenAdminDuyet: string | null;
+  };
+  /** Không có mật khẩu hay thông tin nhạy cảm khác. */
+  chuXe: { id: number; hoTen: string; sdt: string; email: string | null; taoLuc: string | null };
+  trongBai: { dangTrongBai: boolean; vaoLuc: string | null; khu: string | null };
+  /** Gói gần nhất (còn hạn, hoặc đã hết nếu chưa mua tiếp). null: chưa từng mua gói. */
+  goiHienTai: {
+    dangKyChoId: number; tenGoi: string; soTien: number; ngayBatDau: string; ngayKetThuc: string;
+    conHan: boolean; soNgayConLai: number; soNgayQuaHan: number; phiQuaHan: number;
+  } | null;
+  lichSuGoi: DangKyCho[];
 }
 
 export interface ChinhSachHoan {

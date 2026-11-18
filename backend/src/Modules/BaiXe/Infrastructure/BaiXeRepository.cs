@@ -66,21 +66,15 @@ public class CauHinhBaiQuery : ICauHinhBaiQuery
     public async Task<IReadOnlyList<Camera>> LayCameraAsync(CancellationToken ct) => await _db.Camera.AsNoTracking().ToListAsync(ct);
     public async Task<IReadOnlyList<TrangThaiO>> LayTrangThaiOAsync(CancellationToken ct) => await _db.TrangThaiO.AsNoTracking().ToListAsync(ct);
 
-    private class NutDb { public int Id { get; set; } public string Ten { get; set; } = ""; public string ToaDo { get; set; } = "{}"; public int? KhuId { get; set; } }
-    private class CanhDb { public int A { get; set; } public int B { get; set; } public decimal DoDai { get; set; } }
-
-    public async Task<IReadOnlyList<NutRow>> LayNutAsync(CancellationToken ct)
+    // Đồ thị lối đi lấy từ do-thi-ban-do.json (toạ độ theo ảnh sơ đồ thật), không còn đọc nut_duong_di / canh_duong_di
+    // (hai bảng đó giữ nguyên trong DB, toạ độ của sơ đồ mẫu cũ). Nút điểm đến gắn với khu qua khu_vuc.ma_so_do.
+    private async Task<(IReadOnlyList<NutRow> Nut, IReadOnlyList<DuongNganNhat.Canh> Canh)> DoThiAsync(CancellationToken ct)
     {
-        var ds = await _db.Database.SqlQuery<NutDb>($"SELECT id AS Id, ten AS Ten, toa_do AS ToaDo, khu_vuc_id AS KhuId FROM dbo.nut_duong_di").ToListAsync(ct);
-        return ds.Select(n =>
-        {
-            using var j = System.Text.Json.JsonDocument.Parse(n.ToaDo);
-            double Lay(string k) => j.RootElement.TryGetProperty(k, out var v) && v.TryGetDouble(out var d) ? d : 0;
-            return new NutRow(n.Id, n.Ten, Lay("x"), Lay("y"), n.KhuId);
-        }).ToList();
+        var khu = await _db.Khu.AsNoTracking().Where(k => k.MaSoDo != null && k.DangDung)
+            .Select(k => new { k.Id, k.MaSoDo }).ToListAsync(ct);
+        return DoThiBanDo.MacDinh.ChoBaiXe(khu.ToDictionary(k => k.MaSoDo!, k => k.Id));
     }
 
-    public async Task<IReadOnlyList<DuongNganNhat.Canh>> LayCanhAsync(CancellationToken ct) =>
-        (await _db.Database.SqlQuery<CanhDb>($"SELECT nut_a_id AS A, nut_b_id AS B, do_dai AS DoDai FROM dbo.canh_duong_di").ToListAsync(ct))
-        .Select(c => new DuongNganNhat.Canh(c.A, c.B, (double)c.DoDai)).ToList();
+    public async Task<IReadOnlyList<NutRow>> LayNutAsync(CancellationToken ct) => (await DoThiAsync(ct)).Nut;
+    public async Task<IReadOnlyList<DuongNganNhat.Canh>> LayCanhAsync(CancellationToken ct) => (await DoThiAsync(ct)).Canh;
 }

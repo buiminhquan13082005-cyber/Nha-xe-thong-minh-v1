@@ -22,6 +22,11 @@ public static class DependencyInjection
         s.AddScoped<LaySoXeKhuUseCase>();
         s.AddScoped<AdminGanKhuUseCase>();
         s.AddScoped<HetHanGiuChoUseCase>();
+        // Điều hướng trong bãi (mở rộng chọn khu + giữ suất)
+        s.AddScoped<LayDuongDiUseCase>();
+        s.AddScoped<LayDieuHuongCuaToiUseCase>();
+        s.AddScoped<DoiKhuDichUseCase>();
+        s.AddScoped<LayDiSaiKhuUseCase>();
         s.AddScoped<ITimXeModule, TimXeModule>();
         return s;
     }

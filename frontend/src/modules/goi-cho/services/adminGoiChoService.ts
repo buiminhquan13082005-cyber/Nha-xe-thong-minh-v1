@@ -1,5 +1,6 @@
 import type {
-  BangGiaAdmin, ChinhSachHoan, DangKyCho, GoiAdmin, KetQuaHangLoat, SucChuaLoaiXe, XeChoDuyet, XemHuyGoi, XeQuanLy,
+  BangGiaAdmin, ChiTietXeAdmin, ChinhSachHoan, DangKyCho, GoiAdmin, KetQuaHangLoat, LocXeDaDuyet, SucChuaLoaiXe, TrangXeDaDuyet,
+  XeChoDuyet, XemHuyGoi,
 } from '../models';
 import type { IHttpClient } from '@/shared/api/httpClient';
 
@@ -8,7 +9,11 @@ export interface IAdminGoiChoService {
   layXeChoDuyet(): Promise<XeChoDuyet[]>;
   duyetXe(xeId: number, dongY: boolean, lyDo?: string): Promise<void>;
   duyetHangLoat(xeIds: number[], dongY: boolean, lyDo?: string): Promise<KetQuaHangLoat>;
-  layXeDaDuyet(): Promise<XeQuanLy[]>;
+  /** Số xe đang chờ duyệt (badge trên menu "Quản lý xe"). */
+  demXeChoDuyet(): Promise<number>;
+  /** q: biển số (server chuẩn hoá: bỏ chấm, gạch, khoảng trắng, không phân biệt hoa thường) rồi tìm "chứa". */
+  layXeDaDuyet(q: string, loc: LocXeDaDuyet, trang: number, soDong: number): Promise<TrangXeDaDuyet>;
+  layChiTietXe(xeId: number): Promise<ChiTietXeAdmin>;
   goXe(xeId: number, lyDo: string): Promise<void>;
   // huỷ gói có lý do
   layLichSuGoi(xeId: number): Promise<DangKyCho[]>;
@@ -28,7 +33,12 @@ export class ApiAdminGoiChoService implements IAdminGoiChoService {
   duyetHangLoat(xeIds: number[], dongY: boolean, lyDo?: string) {
     return this.http.post<KetQuaHangLoat>('/api/admin/xe/duyet-hang-loat', { xeIds, dongY, lyDo: lyDo ?? null });
   }
-  layXeDaDuyet() { return this.http.get<XeQuanLy[]>('/api/admin/xe/da-duyet'); }
+  async demXeChoDuyet() { return (await this.http.get<{ soLuong: number }>('/api/admin/xe/cho-duyet/so-luong')).soLuong; }
+  layXeDaDuyet(q: string, loc: LocXeDaDuyet, trang: number, soDong: number) {
+    const p = new URLSearchParams({ q, loc, trang: String(trang), soDong: String(soDong) });
+    return this.http.get<TrangXeDaDuyet>(`/api/admin/xe/da-duyet?${p}`);
+  }
+  layChiTietXe(xeId: number) { return this.http.get<ChiTietXeAdmin>(`/api/admin/xe/${xeId}`); }
   goXe(xeId: number, lyDo: string) { return this.http.put<void>(`/api/admin/xe/${xeId}/go`, { lyDo }); }
 
   layLichSuGoi(xeId: number) { return this.http.get<DangKyCho[]>(`/api/admin/xe/${xeId}/dang-ky`); }
